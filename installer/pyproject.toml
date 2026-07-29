@@ -1,0 +1,39 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "edge-installer"
+version = "0.1.0"
+description = "Installer for the Edge Platform control plane"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+  "typer>=0.15.0",
+  "pyyaml>=6.0.2",
+  "pydantic>=2.10.0",
+  "rich>=13.9.0",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.3.0",
+  "ruff>=0.9.0",
+]
+
+[project.scripts]
+edge-installer = "cli.main:app"
+
+[tool.hatch.build.targets.wheel]
+packages = ["cli", "config", "providers", "components", "deployment", "state"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+
+[tool.ruff]
+line-length = 100
+target-version = "py313"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]

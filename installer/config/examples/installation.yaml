@@ -1,0 +1,17 @@
+installation:
+  name: demo
+  provider: aws
+  environment: development
+
+platform:
+  version: "0.1.0"
+
+components:
+  postgres:
+    enabled: true
+
+  redis:
+    enabled: true
+
+  reverse_proxy:
+    enabled: true

@@ -78,13 +78,24 @@ edge-installer validate --config config/examples/installation.yaml
 
 ```bash
 make test
+make backend-test
+make frontend-test
 ```
 
 Runs:
 
 1. Installer Pytest suite
-2. Backend Pytest suite
+2. Backend Pytest suite (requires PostgreSQL; use `make dev` first)
 3. Frontend Vitest suite
+
+## Migrations and seed data
+
+```bash
+make migrate
+make seed
+```
+
+See [Identity and organizations](identity-and-organizations.md) for auth and tenant details.
 
 ## Lint and format
 

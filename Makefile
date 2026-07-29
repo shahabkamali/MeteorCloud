@@ -1,4 +1,4 @@
-.PHONY: help dev stop test lint format install-backend install-frontend install-installer clean
+.PHONY: help dev stop test lint format install-backend install-frontend install-installer clean migrate seed backend-test frontend-test
 
 COMPOSE := docker compose -f docker-compose.yml -f docker-compose.dev.yml
 BACKEND_DIR := platform/backend
@@ -17,12 +17,19 @@ dev: ## Start the development stack
 	@echo "  Frontend: http://localhost:5173"
 	@echo "  API docs: http://localhost:8000/docs"
 	@echo "  Health:   http://localhost:8000/health"
+	@echo "  Seed:     make seed"
 
 stop: ## Stop the development stack
 	$(COMPOSE) down
 
 logs: ## Tail development stack logs
 	$(COMPOSE) logs -f
+
+migrate: ## Run database migrations
+	cd $(BACKEND_DIR) && alembic upgrade head
+
+seed: ## Seed development users and organization
+	cd $(BACKEND_DIR) && python scripts/seed.py
 
 install-backend: ## Install backend Python dependencies
 	cd $(BACKEND_DIR) && python -m pip install -e ".[dev]"
@@ -34,6 +41,12 @@ install-installer: ## Install installer Python dependencies
 	cd $(INSTALLER_DIR) && python -m pip install -e ".[dev]"
 
 install: install-backend install-frontend install-installer ## Install all local dependencies
+
+backend-test: ## Run backend tests
+	cd $(BACKEND_DIR) && python -m pytest -q
+
+frontend-test: ## Run frontend tests
+	cd $(FRONTEND_DIR) && npm test -- --run
 
 test: ## Run all tests
 	@echo "==> Installer tests"

@@ -1,15 +1,69 @@
 import { Navigate, Route, Routes } from "react-router-dom";
 
+import { ProtectedRoute } from "@/auth/ProtectedRoute";
 import { AppLayout } from "@/layouts/AppLayout";
+import { AuthLayout } from "@/layouts/AuthLayout";
+import { LoginPage } from "@/pages/auth/LoginPage";
+import { RegisterPage } from "@/pages/auth/RegisterPage";
 import { HealthPage } from "@/pages/HealthPage";
 import { LandingPage } from "@/pages/LandingPage";
+import { OrganizationCreatePage } from "@/pages/organizations/OrganizationCreatePage";
+import { OrganizationListPage } from "@/pages/organizations/OrganizationListPage";
+import { OrganizationMembersPage } from "@/pages/organizations/OrganizationMembersPage";
+import { OrganizationOverviewPage } from "@/pages/organizations/OrganizationOverviewPage";
+import { OrganizationSettingsPage } from "@/pages/organizations/OrganizationSettingsPage";
 
 export function App() {
   return (
     <Routes>
+      <Route element={<AuthLayout />}>
+        <Route path="login" element={<LoginPage />} />
+        <Route path="register" element={<RegisterPage />} />
+      </Route>
+
       <Route element={<AppLayout />}>
         <Route index element={<LandingPage />} />
         <Route path="health" element={<HealthPage />} />
+        <Route
+          path="organizations"
+          element={
+            <ProtectedRoute>
+              <OrganizationListPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="organizations/new"
+          element={
+            <ProtectedRoute>
+              <OrganizationCreatePage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="organizations/:organizationId"
+          element={
+            <ProtectedRoute>
+              <OrganizationOverviewPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="organizations/:organizationId/members"
+          element={
+            <ProtectedRoute>
+              <OrganizationMembersPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="organizations/:organizationId/settings"
+          element={
+            <ProtectedRoute>
+              <OrganizationSettingsPage />
+            </ProtectedRoute>
+          }
+        />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
     </Routes>

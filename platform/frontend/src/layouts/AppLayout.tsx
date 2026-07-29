@@ -15,7 +15,7 @@ export function AppLayout() {
         </main>
         <footer className="border-t border-border/70 px-6 py-4 text-sm text-muted-foreground">
           <div className="flex items-center justify-between gap-4">
-            <span>Edge Platform · Milestone 1 foundation</span>
+            <span>Edge Platform · Milestone 2 identity & organizations</span>
             <NavLink
               to="/health"
               className={({ isActive }) =>

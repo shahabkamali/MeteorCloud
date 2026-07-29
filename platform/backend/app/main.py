@@ -11,7 +11,10 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.health import router as health_router
 from app.core.config import get_settings
+from app.core.errors import register_exception_handlers
 from app.core.logging import configure_logging
+from app.modules.identity.router import router as identity_router
+from app.modules.organizations.router import router as organizations_router
 
 logger = logging.getLogger(__name__)
 
@@ -43,7 +46,10 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
 
+    register_exception_handlers(application)
     application.include_router(health_router)
+    application.include_router(identity_router)
+    application.include_router(organizations_router)
 
     return application
 

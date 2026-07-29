@@ -1,14 +1,23 @@
-import { Activity, LayoutDashboard } from "lucide-react";
+import { Activity, Building2, LayoutDashboard, LogIn, UserPlus } from "lucide-react";
 import { NavLink } from "react-router-dom";
 
+import { useAuth } from "@/auth/AuthContext";
 import { cn } from "@/lib/utils";
 
-const navItems = [
-  { to: "/", label: "Overview", icon: LayoutDashboard, end: true },
-  { to: "/health", label: "Health", icon: Activity, end: false },
-];
-
 export function Sidebar() {
+  const { isAuthenticated } = useAuth();
+
+  const navItems = [
+    { to: "/", label: "Overview", icon: LayoutDashboard, end: true },
+    { to: "/health", label: "Health", icon: Activity, end: false },
+    ...(isAuthenticated
+      ? [{ to: "/organizations", label: "Organizations", icon: Building2, end: false }]
+      : [
+          { to: "/login", label: "Sign in", icon: LogIn, end: false },
+          { to: "/register", label: "Register", icon: UserPlus, end: false },
+        ]),
+  ];
+
   return (
     <aside className="hidden w-64 shrink-0 border-r border-border/70 bg-white/70 backdrop-blur md:flex md:flex-col">
       <div className="border-b border-border/70 px-6 py-5">

@@ -21,6 +21,8 @@ provisioning are intentionally out of scope for this milestone.
 ```bash
 cp .env.example .env
 make dev
+make migrate   # applied automatically on backend container start
+make seed      # optional development users
 ```
 
 Then open:
@@ -28,6 +30,8 @@ Then open:
 - Frontend: http://localhost:5173
 - Backend health: http://localhost:8000/health
 - API docs: http://localhost:8000/docs
+
+Seed login: `owner@example.com` / `dev-password-123`
 
 Stop the stack with `make stop`.
 
@@ -82,14 +86,11 @@ edge-installer validate --config config/examples/installation.yaml
 
 - [Architecture overview](docs/architecture.md)
 - [Development guide](docs/development.md)
+- [Identity and organizations](docs/identity-and-organizations.md)
 - [Installer README](installer/README.md)
 - [Platform README](platform/README.md)
 
-## Milestone 1 deliverables
+## Milestone status
 
-- Backend starts and serves `/health`
-- Frontend starts with landing and health pages
-- PostgreSQL starts via Docker Compose
-- Installer CLI commands execute with friendly output
-- Configuration loads and validates
-- Tests and lint pass
+- **Milestone 1** — foundation (Compose, FastAPI, React shell, installer CLI)
+- **Milestone 2** — identity, organizations, memberships, RBAC

@@ -1,9 +1,11 @@
-.PHONY: help dev stop test lint format install-backend install-frontend install-installer clean migrate seed backend-test frontend-test
+.PHONY: help dev stop test lint format typecheck install-backend install-frontend install-installer clean migrate seed backend-test frontend-test installer-test terraform-check ansible-check
 
 COMPOSE := docker compose -f docker-compose.yml -f docker-compose.dev.yml
 BACKEND_DIR := platform/backend
 FRONTEND_DIR := platform/frontend
 INSTALLER_DIR := installer
+INFRA_DIR := infrastructure
+CONFIG ?= installation.yaml
 
 help: ## Show available commands
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-18s\033[0m %s\n", $$1, $$2}'
@@ -71,6 +73,35 @@ format: ## Format all projects
 	cd $(BACKEND_DIR) && python -m ruff format . && python -m ruff check --fix .
 	@echo "==> Frontend format"
 	cd $(FRONTEND_DIR) && npm run format
+
+typecheck: ## Run static type checks where configured
+	@echo "==> Backend typecheck (compileall)"
+	cd $(BACKEND_DIR) && python -m compileall app tests scripts
+	@echo "==> Installer typecheck (compileall)"
+	cd $(INSTALLER_DIR) && python -m compileall edge_installer tests
+
+installer-test: ## Run installer tests only
+	cd $(INSTALLER_DIR) && python -m pytest -q
+
+terraform-check: ## Validate Terraform formatting and syntax
+	cd $(INFRA_DIR)/terraform/aws && terraform fmt -check
+	cd $(INFRA_DIR)/terraform/aws && terraform init -backend=false -input=false
+	cd $(INFRA_DIR)/terraform/aws && terraform validate
+
+ansible-check: ## Run Ansible syntax checks
+	cd $(INFRA_DIR)/ansible && ansible-playbook --syntax-check playbooks/provision.yml
+	cd $(INFRA_DIR)/ansible && ansible-playbook --syntax-check playbooks/deploy.yml
+	cd $(INFRA_DIR)/ansible && ansible-playbook --syntax-check playbooks/upgrade.yml
+	cd $(INFRA_DIR)/ansible && ansible-playbook --syntax-check playbooks/destroy.yml
+
+installer-validate: ## Validate installer configuration
+	cd $(INSTALLER_DIR) && edge-installer validate $(CONFIG)
+
+installer-plan: ## Plan AWS infrastructure and deployment
+	cd $(INSTALLER_DIR) && edge-installer plan $(CONFIG)
+
+installer-apply: ## Apply AWS infrastructure and deploy platform
+	cd $(INSTALLER_DIR) && edge-installer apply $(CONFIG)
 
 clean: ## Remove local build artifacts
 	$(COMPOSE) down -v --remove-orphans || true

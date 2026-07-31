@@ -1,0 +1,50 @@
+installation:
+  name: production
+  environment: production
+  provider: aws
+
+platform:
+  version: "0.2.0"
+  domain: null
+  public_url: null
+
+aws:
+  region: eu-central-1
+  availability_zone: null
+  instance_type: t3.small
+  architecture: amd64
+  ami_id: null
+  ssh_key_name: edge-platform
+  ssh_private_key_path: ~/.ssh/edge-platform.pem
+  root_volume_size_gb: 30
+  assign_elastic_ip: true
+
+network:
+  allowed_ssh_cidrs:
+    - 203.0.113.10/32
+  allow_http: true
+  allow_https: true
+
+components:
+  postgres:
+    enabled: true
+    provider: local
+    database_name: edge_platform
+    username: edge_platform
+
+  redis:
+    enabled: true
+    provider: local
+
+  reverse_proxy:
+    enabled: true
+    provider: traefik
+
+deployment:
+  backend_image: ghcr.io/example/edge-platform-backend:0.2.0
+  frontend_image: ghcr.io/example/edge-platform-frontend:0.2.0
+  image_pull_policy: always
+  health_check_timeout_seconds: 180
+
+secrets:
+  source: environment

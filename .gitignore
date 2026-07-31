@@ -43,6 +43,7 @@ dist/
 Thumbs.db
 
 # Installer state
+.installer-state/
 installer/state/*.json
 !installer/state/.gitkeep
 

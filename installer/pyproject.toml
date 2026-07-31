@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "edge-installer"
-version = "0.1.0"
+version = "0.2.0"
 description = "Installer for the Edge Platform control plane"
 readme = "README.md"
 requires-python = ">=3.13"
@@ -22,10 +22,10 @@ dev = [
 ]
 
 [project.scripts]
-edge-installer = "cli.main:app"
+edge-installer = "edge_installer.cli.main:app"
 
 [tool.hatch.build.targets.wheel]
-packages = ["cli", "config", "providers", "components", "deployment", "state"]
+packages = ["edge_installer"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

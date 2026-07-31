@@ -20,3 +20,9 @@ class HealthResponse(BaseModel):
 def health() -> HealthResponse:
     """Return service health for load balancers and local checks."""
     return HealthResponse(status="ok", service="edge-platform-backend", version="0.1.0")
+
+
+@router.get("/api/v1/health", response_model=HealthResponse)
+def health_v1() -> HealthResponse:
+    """Versioned health endpoint for reverse proxies and installers."""
+    return health()

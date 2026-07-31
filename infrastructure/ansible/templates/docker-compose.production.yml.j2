@@ -1,0 +1,82 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    env_file:
+      - /opt/edge-platform/config/platform.env
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - /opt/edge-platform/data/postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - platform
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    volumes:
+      - /opt/edge-platform/data/redis:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+    networks:
+      - platform
+
+  backend:
+    image: {{ backend_image }}
+    restart: unless-stopped
+    env_file:
+      - /opt/edge-platform/config/platform.env
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+    networks:
+      - platform
+
+  frontend:
+    image: {{ frontend_image }}
+    restart: unless-stopped
+    environment:
+      VITE_API_BASE_URL: {{ platform_public_url }}
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - platform
+
+  traefik:
+    image: traefik:v3.3
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - /opt/edge-platform/traefik/traefik.yml:/etc/traefik/traefik.yml:ro
+      - /opt/edge-platform/traefik/dynamic.yml:/etc/traefik/dynamic.yml:ro
+      - /opt/edge-platform/traefik/acme.json:/acme.json
+    depends_on:
+      backend:
+        condition: service_healthy
+      frontend:
+        condition: service_started
+    networks:
+      - platform
+
+networks:
+  platform:
+    driver: bridge

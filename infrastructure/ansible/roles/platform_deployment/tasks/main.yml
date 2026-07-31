@@ -1,0 +1,34 @@
+---
+- name: Pull container images
+  ansible.builtin.command:
+    cmd: docker compose -f /opt/edge-platform/docker-compose.yml pull
+    chdir: /opt/edge-platform
+
+- name: Start platform stack
+  ansible.builtin.command:
+    cmd: docker compose -f /opt/edge-platform/docker-compose.yml up -d
+    chdir: /opt/edge-platform
+
+- name: Wait for PostgreSQL health
+  ansible.builtin.command:
+    cmd: docker compose -f /opt/edge-platform/docker-compose.yml exec -T postgres pg_isready -U {{ postgres_username }} -d {{ postgres_database }}
+    chdir: /opt/edge-platform
+  register: pg_ready
+  retries: 30
+  delay: 5
+  until: pg_ready.rc == 0
+
+- name: Run database migrations
+  ansible.builtin.command:
+    cmd: docker compose -f /opt/edge-platform/docker-compose.yml exec -T backend alembic upgrade head
+    chdir: /opt/edge-platform
+
+- name: Create initial administrator when configured
+  ansible.builtin.command:
+    cmd: docker compose -f /opt/edge-platform/docker-compose.yml exec -T backend python -m app.cli create-admin
+    chdir: /opt/edge-platform
+  environment:
+    EDGE_PLATFORM_ADMIN_EMAIL: "{{ lookup('env', 'EDGE_PLATFORM_ADMIN_EMAIL') | default('', true) }}"
+    EDGE_PLATFORM_ADMIN_PASSWORD: "{{ lookup('env', 'EDGE_PLATFORM_ADMIN_PASSWORD') | default('', true) }}"
+  when: lookup('env', 'EDGE_PLATFORM_ADMIN_EMAIL') | length > 0 and lookup('env', 'EDGE_PLATFORM_ADMIN_PASSWORD') | length > 0
+  failed_when: false

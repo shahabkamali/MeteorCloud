@@ -1,0 +1,8 @@
+- name: Destroy Edge Platform services
+  hosts: platform
+  become: true
+  tasks:
+    - name: Stop Docker Compose stack
+      ansible.builtin.command:
+        cmd: docker compose -f /opt/edge-platform/docker-compose.yml down -v
+      failed_when: false

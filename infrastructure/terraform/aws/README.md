@@ -1,5 +1,5 @@
-# AWS Terraform placeholder
+# AWS Terraform module for Edge Platform
 
-Terraform modules for the AWS infrastructure provider will live here.
+Creates a single EC2 instance, security group, and optional Elastic IP for the Edge Platform installer.
 
-Milestone 1 intentionally ships no Terraform resources.
+State is managed locally by the installer under `.installer-state/<installation>/terraform/`.

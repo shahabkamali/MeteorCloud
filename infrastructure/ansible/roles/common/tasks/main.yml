@@ -9,6 +9,7 @@
     name:
       - ca-certificates
       - curl
+      - git
       - gnupg
       - lsb-release
       - python3-pip

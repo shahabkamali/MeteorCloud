@@ -11,10 +11,23 @@ The installer reads a single YAML file, typically `installation.yaml`.
 | `aws` | Region, instance type, SSH key, Elastic IP, optional profile |
 | `network` | SSH CIDR allow list, HTTP/HTTPS exposure |
 | `components` | Local PostgreSQL, Redis, Traefik |
-| `deployment` | Container images and health timeout |
+| `deployment` | Git repo / images, build source, health timeout |
 | `secrets` | Must remain `environment` |
 
 See `installer/edge_installer/config/examples/installation.yaml` for a full example.
+
+## Deployment source
+
+```yaml
+deployment:
+  repository_url: https://github.com/shahabkamali/MeteorCloud.git
+  git_ref: master
+  image_source: git          # git = clone+build on EC2; registry = docker pull
+  backend_image: edge-platform-backend:0.2.0
+  frontend_image: edge-platform-frontend:0.2.0
+```
+
+`git@github.com:shahabkamali/MeteorCloud.git` is also valid; the deploy playbook converts it to HTTPS for cloning.
 
 ## URL behavior
 

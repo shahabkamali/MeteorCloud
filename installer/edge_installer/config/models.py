@@ -85,6 +85,9 @@ class ComponentsSettings(BaseModel):
 class DeploymentSettings(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
+    repository_url: str = "https://github.com/shahabkamali/MeteorCloud.git"
+    git_ref: str = "master"
+    image_source: Literal["git", "registry"] = "git"
     backend_image: str = Field(min_length=1)
     frontend_image: str = Field(min_length=1)
     image_pull_policy: Literal["always", "if-not-present", "never"] = "always"

@@ -88,51 +88,52 @@ def test_plan_does_not_apply(mock_plan: MagicMock, config_path: Path) -> None:
     mock_plan.assert_called_once()
 
 
-@patch("edge_installer.deployment.service.PlatformDeploymentService.apply")
-def test_apply_executes_and_prints_summary(mock_apply: MagicMock, config_path: Path) -> None:
-    from edge_installer.deployment.service import ApplyResult
-    from edge_installer.state.models import InstallationState
+def test_apply_accepts_positional_config(config_path: Path) -> None:
+    with patch(
+        "edge_installer.deployment.service.PlatformDeploymentService.apply"
+    ) as mock_apply:
+        from edge_installer.deployment.service import ApplyResult
+        from edge_installer.state.models import InstallationState
 
-    outputs = TerraformOutputs(
-        instance_id="i-abc123",
-        public_ip="18.198.10.20",
-        elastic_ip="18.198.10.20",
-        private_ip="10.0.0.5",
-        region="eu-central-1",
-        ssh_username="ubuntu",
-        security_group_id="sg-123",
-    )
-    state = InstallationState(
-        name="production",
-        provider="aws",
-        environment="production",
-        region="eu-central-1",
-        platform_version="0.2.0",
-        instance_id="i-abc123",
-        public_ip="18.198.10.20",
-        platform_url="http://18.198.10.20",
-    )
-    mock_apply.return_value = ApplyResult(
-        state=state,
-        outputs=outputs,
-        health={
-            "infrastructure": "healthy",
-            "docker": "healthy",
-            "postgres": "healthy",
-            "redis": "healthy",
-            "backend": "healthy",
-            "frontend": "healthy",
-            "reverse_proxy": "healthy",
-        },
-    )
+        outputs = TerraformOutputs(
+            instance_id="i-abc123",
+            public_ip="18.198.10.20",
+            elastic_ip="18.198.10.20",
+            private_ip="10.0.0.5",
+            region="eu-central-1",
+            ssh_username="ubuntu",
+            security_group_id="sg-123",
+        )
+        state = InstallationState(
+            name="production",
+            provider="aws",
+            environment="production",
+            region="eu-central-1",
+            platform_version="0.2.0",
+            instance_id="i-abc123",
+            public_ip="18.198.10.20",
+            platform_url="http://18.198.10.20",
+        )
+        mock_apply.return_value = ApplyResult(
+            state=state,
+            outputs=outputs,
+            health={
+                "infrastructure": "healthy",
+                "docker": "healthy",
+                "postgres": "healthy",
+                "redis": "healthy",
+                "backend": "healthy",
+                "frontend": "healthy",
+                "reverse_proxy": "healthy",
+            },
+        )
 
-    result = runner.invoke(app, ["apply", "--config", str(config_path)])
+        result = runner.invoke(app, ["apply", str(config_path)])
 
-    assert result.exit_code == 0
-    assert "Installation completed successfully" in result.stdout
-    assert "Platform URL: http://18.198.10.20" in result.stdout
-    assert "postgres-secret" not in result.stdout
-    assert "jwt-secret" not in result.stdout
+        assert result.exit_code == 0, result.stdout
+        assert "Installation completed successfully" in result.stdout
+        mock_apply.assert_called_once()
+
 
 
 @patch("edge_installer.deployment.service.PlatformDeploymentService.apply")

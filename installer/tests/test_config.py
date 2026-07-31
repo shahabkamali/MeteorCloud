@@ -53,8 +53,8 @@ def test_invalid_configuration_reports_field(tmp_path: Path) -> None:
         "network:\n"
         "  allowed_ssh_cidrs: ['203.0.113.10/32']\n"
         "deployment:\n"
-        "  backend_image: ghcr.io/example/backend\n"
-        "  frontend_image: ghcr.io/example/frontend\n",
+        "  backend_image: edge-platform-backend:0.2.0\n"
+        "  frontend_image: edge-platform-frontend:0.2.0\n",
         encoding="utf-8",
     )
 

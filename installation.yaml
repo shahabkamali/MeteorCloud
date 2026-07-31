@@ -21,7 +21,7 @@ aws:
 
 network:
   allowed_ssh_cidrs:
-    - 203.0.113.10/32
+    - 0.0.0.0/0
   allow_http: true
   allow_https: true
 
@@ -41,9 +41,12 @@ components:
     provider: traefik
 
 deployment:
-  backend_image: ghcr.io/example/edge-platform-backend:0.2.0
-  frontend_image: ghcr.io/example/edge-platform-frontend:0.2.0
-  image_pull_policy: always
+  repository_url: https://github.com/shahabkamali/MeteorCloud.git
+  git_ref: master
+  image_source: git
+  backend_image: edge-platform-backend:0.2.0
+  frontend_image: edge-platform-frontend:0.2.0
+  image_pull_policy: never
   health_check_timeout_seconds: 180
 
 secrets:

@@ -20,8 +20,12 @@ app = typer.Typer(
 )
 console = Console()
 
+ConfigArgument = Annotated[
+    Path | None,
+    typer.Argument(help="Path to installation configuration YAML."),
+]
 ConfigOption = Annotated[
-    Path,
+    Path | None,
     typer.Option("--config", "-c", help="Path to installation configuration YAML."),
 ]
 
@@ -34,6 +38,10 @@ def _configure_logging(verbose: bool) -> None:
         datefmt="[%X]",
         handlers=[RichHandler(console=console, rich_tracebacks=True, show_path=False)],
     )
+
+
+def _resolve_config(config_arg: Path | None, config_opt: Path | None) -> Path:
+    return config_opt or config_arg or Path("installation.yaml")
 
 
 @app.callback()
@@ -51,37 +59,57 @@ def init(
 
 
 @app.command()
-def validate(config: ConfigOption = Path("installation.yaml")) -> None:
-    commands.run_validate(config_path=config, console=console)
+def validate(
+    config_arg: ConfigArgument = None,
+    config: ConfigOption = None,
+) -> None:
+    commands.run_validate(config_path=_resolve_config(config_arg, config), console=console)
 
 
 @app.command()
-def plan(config: ConfigOption = Path("installation.yaml")) -> None:
-    commands.run_plan(config_path=config, console=console)
+def plan(
+    config_arg: ConfigArgument = None,
+    config: ConfigOption = None,
+) -> None:
+    commands.run_plan(config_path=_resolve_config(config_arg, config), console=console)
 
 
 @app.command()
-def apply(config: ConfigOption = Path("installation.yaml")) -> None:
-    commands.run_apply(config_path=config, console=console)
+def apply(
+    config_arg: ConfigArgument = None,
+    config: ConfigOption = None,
+) -> None:
+    commands.run_apply(config_path=_resolve_config(config_arg, config), console=console)
 
 
 @app.command()
-def status(config: ConfigOption = Path("installation.yaml")) -> None:
-    commands.run_status(config_path=config, console=console)
+def status(
+    config_arg: ConfigArgument = None,
+    config: ConfigOption = None,
+) -> None:
+    commands.run_status(config_path=_resolve_config(config_arg, config), console=console)
 
 
 @app.command()
-def upgrade(config: ConfigOption = Path("installation.yaml")) -> None:
-    commands.run_upgrade(config_path=config, console=console)
+def upgrade(
+    config_arg: ConfigArgument = None,
+    config: ConfigOption = None,
+) -> None:
+    commands.run_upgrade(config_path=_resolve_config(config_arg, config), console=console)
 
 
 @app.command()
 def destroy(
-    config: ConfigOption = Path("installation.yaml"),
+    config_arg: ConfigArgument = None,
+    config: ConfigOption = None,
     yes: Annotated[bool, typer.Option("--yes", help="Skip confirmation.")] = False,
     force: Annotated[bool, typer.Option("--force", hidden=True)] = False,
 ) -> None:
-    commands.run_destroy(config_path=config, force=yes or force, console=console)
+    commands.run_destroy(
+        config_path=_resolve_config(config_arg, config),
+        force=yes or force,
+        console=console,
+    )
 
 
 if __name__ == "__main__":

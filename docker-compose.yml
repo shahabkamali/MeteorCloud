@@ -25,8 +25,8 @@ services:
 
   backend:
     build:
-      context: ./platform/backend
-      dockerfile: ../docker/Dockerfile.backend
+      context: .
+      dockerfile: platform/docker/Dockerfile.backend
     env_file:
       - .env
     environment:
@@ -46,8 +46,8 @@ services:
 
   frontend:
     build:
-      context: ./platform/frontend
-      dockerfile: ../docker/Dockerfile.frontend
+      context: .
+      dockerfile: platform/docker/Dockerfile.frontend.dev
     environment:
       VITE_API_BASE_URL: http://localhost:8000
     ports:

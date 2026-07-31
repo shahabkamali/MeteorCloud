@@ -82,8 +82,21 @@ edge-installer validate --config config/examples/installation.yaml
 - Clear module boundaries
 - No premature abstractions
 
+## AWS install (short)
+
+See **[Install quickstart](docs/install-quickstart.md)** — one command for Terraform + Ansible:
+
+```bash
+export EDGE_PLATFORM_POSTGRES_PASSWORD='...'
+export EDGE_PLATFORM_JWT_SECRET='...'
+edge-installer apply installation.yaml
+```
+
 ## Documentation
 
+- [Install quickstart (Terraform / Ansible)](docs/install-quickstart.md)
+- [AWS deployment](docs/aws-deployment.md)
+- [AWS prerequisites](docs/aws-prerequisites.md)
 - [Architecture overview](docs/architecture.md)
 - [Development guide](docs/development.md)
 - [Identity and organizations](docs/identity-and-organizations.md)
@@ -94,3 +107,4 @@ edge-installer validate --config config/examples/installation.yaml
 
 - **Milestone 1** — foundation (Compose, FastAPI, React shell, installer CLI)
 - **Milestone 2** — identity, organizations, memberships, RBAC
+- **Milestone 3** — AWS EC2 install via Terraform + Ansible (`edge-installer apply`)

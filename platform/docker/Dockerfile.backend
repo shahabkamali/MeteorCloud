@@ -9,12 +9,12 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends build-essential libpq-dev \
     && rm -rf /var/lib/apt/lists/*
 
-COPY pyproject.toml README.md ./
-COPY app ./app
-COPY alembic ./alembic
-COPY alembic.ini ./
+COPY platform/backend/pyproject.toml platform/backend/README.md ./
+COPY platform/backend/app ./app
+COPY platform/backend/alembic ./alembic
+COPY platform/backend/alembic.ini ./
 
-RUN pip install --no-cache-dir -e ".[dev]"
+RUN pip install --no-cache-dir .
 
 EXPOSE 8000
 

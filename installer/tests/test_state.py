@@ -84,3 +84,4 @@ def test_inventory_generation(tmp_path: Path) -> None:
 
     assert "ansible_host=1.2.3.4" in content
     assert "ansible_user=ubuntu" in content
+    assert content.startswith("[platform]\nedge ")

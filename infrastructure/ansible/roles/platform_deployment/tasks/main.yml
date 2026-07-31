@@ -1,34 +1,103 @@
 ---
-- name: Pull container images
+- name: Normalize repository URL for HTTPS clone
+  ansible.builtin.set_fact:
+    platform_repository_url: >-
+      {{
+        (repository_url | default('https://github.com/shahabkamali/MeteorCloud.git'))
+        | regex_replace('^git@github\\.com:', 'https://github.com/')
+      }}
+  when: (image_source | default('git')) == 'git'
+
+- name: Clone or update platform repository
+  ansible.builtin.git:
+    repo: "{{ platform_repository_url }}"
+    dest: /opt/edge-platform/src
+    version: "{{ git_ref | default('master') }}"
+    force: true
+    update: true
+  when: (image_source | default('git')) == 'git'
+
+- name: Build backend image from repository
+  ansible.builtin.command:
+    cmd: >-
+      docker build
+      -f platform/docker/Dockerfile.backend
+      -t {{ backend_image | default('edge-platform-backend:0.2.0') }}
+      .
+    chdir: /opt/edge-platform/src
+  when: (image_source | default('git')) == 'git'
+
+- name: Build frontend image from repository
+  ansible.builtin.command:
+    cmd: >-
+      docker build
+      -f platform/docker/Dockerfile.frontend
+      --build-arg VITE_API_BASE_URL={{ platform_public_url }}
+      -t {{ frontend_image | default('edge-platform-frontend:0.2.0') }}
+      .
+    chdir: /opt/edge-platform/src
+  when: (image_source | default('git')) == 'git'
+
+- name: Pull container images from registry
   ansible.builtin.command:
     cmd: docker compose -f /opt/edge-platform/docker-compose.yml pull
     chdir: /opt/edge-platform
+  when: (image_source | default('git')) == 'registry'
 
 - name: Start platform stack
   ansible.builtin.command:
-    cmd: docker compose -f /opt/edge-platform/docker-compose.yml up -d
+    cmd: docker compose -f /opt/edge-platform/docker-compose.yml up -d --remove-orphans
     chdir: /opt/edge-platform
+  register: compose_up
+  failed_when: false
+
+- name: Capture postgres logs after compose up
+  ansible.builtin.command:
+    cmd: docker compose -f /opt/edge-platform/docker-compose.yml logs --tail=100 postgres
+    chdir: /opt/edge-platform
+  register: postgres_logs
+  changed_when: false
+  failed_when: false
+
+- name: Fail early if compose up reported an error
+  ansible.builtin.fail:
+    msg: |
+      docker compose up failed (rc={{ compose_up.rc }}).
+      stdout: {{ compose_up.stdout }}
+      stderr: {{ compose_up.stderr }}
+      postgres logs:
+      {{ postgres_logs.stdout | default('') }}
+  when: compose_up.rc != 0
 
 - name: Wait for PostgreSQL health
   ansible.builtin.command:
-    cmd: docker compose -f /opt/edge-platform/docker-compose.yml exec -T postgres pg_isready -U {{ postgres_username }} -d {{ postgres_database }}
+    cmd: >-
+      docker compose -f /opt/edge-platform/docker-compose.yml exec -T postgres
+      pg_isready -U {{ postgres_username }} -d {{ postgres_database }}
     chdir: /opt/edge-platform
   register: pg_ready
   retries: 30
   delay: 5
   until: pg_ready.rc == 0
 
+
 - name: Run database migrations
   ansible.builtin.command:
-    cmd: docker compose -f /opt/edge-platform/docker-compose.yml exec -T backend alembic upgrade head
+    cmd: >-
+      docker compose -f /opt/edge-platform/docker-compose.yml exec -T backend
+      alembic upgrade head
     chdir: /opt/edge-platform
 
 - name: Create initial administrator when configured
   ansible.builtin.command:
-    cmd: docker compose -f /opt/edge-platform/docker-compose.yml exec -T backend python -m app.cli create-admin
+    cmd: >-
+      docker compose -f /opt/edge-platform/docker-compose.yml exec -T backend
+      python -m app.cli create-admin
     chdir: /opt/edge-platform
   environment:
     EDGE_PLATFORM_ADMIN_EMAIL: "{{ lookup('env', 'EDGE_PLATFORM_ADMIN_EMAIL') | default('', true) }}"
     EDGE_PLATFORM_ADMIN_PASSWORD: "{{ lookup('env', 'EDGE_PLATFORM_ADMIN_PASSWORD') | default('', true) }}"
-  when: lookup('env', 'EDGE_PLATFORM_ADMIN_EMAIL') | length > 0 and lookup('env', 'EDGE_PLATFORM_ADMIN_PASSWORD') | length > 0
+  when: >-
+    (lookup('env', 'EDGE_PLATFORM_ADMIN_EMAIL') | default('', true) | length > 0)
+    and (lookup('env', 'EDGE_PLATFORM_ADMIN_PASSWORD') | default('', true) | length > 0)
   failed_when: false

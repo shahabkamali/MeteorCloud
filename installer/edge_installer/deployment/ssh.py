@@ -12,6 +12,15 @@ from edge_installer.process.runner import run_command
 
 logger = logging.getLogger(__name__)
 
+# Ephemeral EC2 instances often reuse Elastic IPs; ignore global known_hosts conflicts.
+_SSH_COMMON_OPTS = (
+    "BatchMode=yes",
+    "StrictHostKeyChecking=no",
+    "UserKnownHostsFile=/dev/null",
+    "GlobalKnownHostsFile=/dev/null",
+    "ConnectTimeout=5",
+)
+
 
 def wait_for_ssh_port(host: str, *, timeout_seconds: int = 300) -> None:
     logger.info("Waiting for EC2 instance at %s:22...", host)
@@ -40,23 +49,13 @@ def verify_ssh_auth(
 ) -> None:
     logger.info("Verifying SSH authentication...")
     deadline = time.monotonic() + timeout_seconds
+    command = ["ssh", "-i", str(private_key_path)]
+    for option in _SSH_COMMON_OPTS:
+        command.extend(["-o", option])
+    command.extend([f"{username}@{host}", "echo ready"])
+
     while time.monotonic() < deadline:
-        result = run_command(
-            [
-                "ssh",
-                "-i",
-                str(private_key_path),
-                "-o",
-                "BatchMode=yes",
-                "-o",
-                "StrictHostKeyChecking=accept-new",
-                "-o",
-                "ConnectTimeout=5",
-                f"{username}@{host}",
-                "echo ready",
-            ],
-            stream=False,
-        )
+        result = run_command(command, stream=False)
         if result.returncode == 0:
             logger.info("Server is ready.")
             return

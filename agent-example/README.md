@@ -13,12 +13,25 @@ There are **two ways** to enroll a device:
 
 ## Install
 
+On a Linux device, from this directory:
+
 ```bash
-cd agent-example
+sudo ./installcli.sh
+meteorcli --help
+```
+
+That creates a virtualenv in `/opt/meteorcli`, puts `meteorcli` on `PATH` via
+`/usr/local/bin`, and creates `/etc/meteorcli`. Re-run the script to upgrade.
+Uninstall with `sudo ./installcli.sh --uninstall` (credentials in
+`/etc/meteorcli` are kept).
+
+For local development:
+
+```bash
 python -m pip install -e ".[dev]"
 ```
 
-This installs the `meteorcli` command (`edge-agent` remains as an internal alias).
+This also installs the `edge-agent` internal alias.
 
 ## Usage
 

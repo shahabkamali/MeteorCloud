@@ -1,3 +1,5 @@
+import { resolveApiBaseUrl } from "@/lib/apiBase";
+
 export type ApiErrorBody = {
   error: {
     code: string;
@@ -17,8 +19,6 @@ export class ApiError extends Error {
   }
 }
 
-const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000";
-
 type RequestOptions = {
   method?: string;
   token?: string | null;
@@ -37,7 +37,7 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
     headers.Authorization = `Bearer ${options.token}`;
   }
 
-  const response = await fetch(`${apiBaseUrl}${path}`, {
+  const response = await fetch(`${resolveApiBaseUrl()}${path}`, {
     method: options.method ?? (options.body !== undefined ? "POST" : "GET"),
     headers,
     body: options.body !== undefined ? JSON.stringify(options.body) : undefined,

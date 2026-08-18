@@ -32,6 +32,7 @@ from edge_agent.registration import register
 from meteorcli import __version__
 from meteorcli.config import (
     CliPaths,
+    chown_config_dir,
     default_config_dir,
     derive_api_base,
     persist_connection,
@@ -50,11 +51,30 @@ ENV_API_KEY = "METEORCLI_API_KEY"
 ENV_CONFIG_DIR = "METEORCLI_CONFIG_DIR"
 
 
+def _normalize_secret(value: str | None) -> str | None:
+    if not value:
+        return None
+    cleaned = value.strip().strip("\"'").strip()
+    if cleaned.lower().startswith("bearer "):
+        cleaned = cleaned[7:].strip()
+    return cleaned or None
+
+
 def _paths_from_args(args: argparse.Namespace) -> CliPaths:
     config_dir = args.config_dir or os.environ.get(ENV_CONFIG_DIR)
     if config_dir:
         return CliPaths.from_dir(Path(config_dir).expanduser())
     return CliPaths.from_dir(default_config_dir())
+
+
+def _finish_config_write(paths: CliPaths) -> None:
+    chown_config_dir(paths.config_path.parent)
+    if os.environ.get("SUDO_USER") and os.geteuid() == 0:
+        print(
+            f"note: sudo is not required; config is stored for {os.environ['SUDO_USER']} "
+            f"at {paths.config_path.parent}",
+            file=sys.stderr,
+        )
 
 
 def _load(paths: CliPaths) -> AgentConfig | None:
@@ -79,20 +99,20 @@ def _resolve_token(args: argparse.Namespace) -> tuple[str | None, Path | None]:
 
 
 def _resolve_api_key(args: argparse.Namespace, paths: CliPaths) -> str | None:
-    flag = getattr(args, "api_key", None)
+    flag = _normalize_secret(getattr(args, "api_key", None))
     if flag:
         return flag
-    env_key = os.environ.get(ENV_API_KEY)
+    env_key = _normalize_secret(os.environ.get(ENV_API_KEY))
     if env_key:
         return env_key
-    return read_secret(paths.api_key_path)
+    return _normalize_secret(read_secret(paths.api_key_path))
 
 
 def _cmd_config(args: argparse.Namespace) -> int:
     paths = _paths_from_args(args)
     domain = args.domain or os.environ.get(ENV_DOMAIN)
     api_base = args.api_base
-    api_key = args.api_key or os.environ.get(ENV_API_KEY)
+    api_key = _normalize_secret(args.api_key or os.environ.get(ENV_API_KEY))
 
     if args.show:
         config = _load(paths)
@@ -117,6 +137,7 @@ def _cmd_config(args: argparse.Namespace) -> int:
     persist_connection(paths, domain=domain, api_base=api_base, http=args.http)
     if api_key:
         write_secret(paths.api_key_path, api_key)
+    _finish_config_write(paths)
     print(f"Configuration saved under {paths.config_path.parent}")
     print(f"Next: verify with '{PROG} test'.")
     return 0
@@ -167,6 +188,7 @@ def _cmd_register(args: argparse.Namespace) -> int:
     print(f"Credential:     stored at {paths.token_path}")
     print()
     print(f"Next: start sending heartbeats with '{PROG} run'.")
+    chown_config_dir(paths.config_path.parent)
     return 0
 
 
@@ -186,6 +208,7 @@ def _persist_claimed_device(
     existing.heartbeat_interval_seconds = int(poll.get("heartbeat_interval_seconds") or 60)
     save_config(paths.agent_paths(), existing)
     remove_secret(paths.claim_secret_path)
+    chown_config_dir(paths.config_path.parent)
 
 
 def _cmd_request(args: argparse.Namespace) -> int:
@@ -279,6 +302,12 @@ def _cmd_test(args: argparse.Namespace) -> int:
             f"(use --server, {ENV_SERVER}, or '{PROG} config --domain').",
             file=sys.stderr,
         )
+        if os.geteuid() != 0 and Path("/etc/meteorcli/config.json").exists():
+            print(
+                "hint: config was previously saved with sudo under /etc/meteorcli. "
+                f"Re-run '{PROG} config --domain … --api-key …' without sudo.",
+                file=sys.stderr,
+            )
         return 2
 
     if args.http:
@@ -307,7 +336,14 @@ def _cmd_test(args: argparse.Namespace) -> int:
     try:
         checked = client.check_api_key(api_key=api_key)
     except AgentApiError as error:
+        prefix = api_key[:12] if api_key.startswith("key_") else "key_…"
         print(f"API key:        rejected ({error.message})", file=sys.stderr)
+        print(
+            f"hint: {server} does not recognize {prefix}…. "
+            "Create a new key in Fleet → API keys on that same server, "
+            f"then run '{PROG} config --api-key key_…' without sudo.",
+            file=sys.stderr,
+        )
         return 1
 
     print("API key:        ok")

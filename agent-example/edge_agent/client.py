@@ -70,7 +70,7 @@ class EdgeClient:
         return self._get("/api/v1/health")
 
     def check_api_key(self, *, api_key: str) -> dict[str, Any]:
-        return self._get("/api/v1/agent/enroll/check", bearer=api_key)
+        return self._post("/api/v1/agent/enroll/check", {}, bearer=api_key)
 
     def enroll_request(
         self,

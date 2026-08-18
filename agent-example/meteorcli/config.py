@@ -12,15 +12,61 @@ from edge_agent.config import AgentConfig, AgentPaths, load_config, save_config
 SYSTEM_CONFIG_DIR = Path("/etc/meteorcli")
 
 
-def default_config_dir() -> Path:
-    """System dir as root, otherwise the calling user's config directory."""
+def _sudo_user() -> str | None:
+    name = os.environ.get("SUDO_USER")
+    if not name or name == "root":
+        return None
+    return name
+
+
+def _is_root() -> bool:
     geteuid = getattr(os, "geteuid", None)
-    if geteuid is not None and geteuid() == 0:
+    return geteuid is not None and geteuid() == 0
+
+
+def _user_home(username: str | None = None) -> Path:
+    if username:
+        try:
+            import pwd
+
+            return Path(pwd.getpwnam(username).pw_dir)
+        except (ImportError, KeyError, OSError):
+            pass
+    return Path.home()
+
+
+def default_config_dir() -> Path:
+    """Per-user config dir, including when the command is run via sudo.
+
+    Only an interactive root login (no SUDO_USER) uses ``/etc/meteorcli``.
+    """
+    sudo_user = _sudo_user()
+    if _is_root() and sudo_user is None:
         return SYSTEM_CONFIG_DIR
+    if sudo_user:
+        return _user_home(sudo_user) / ".config" / "meteorcli"
     xdg = os.environ.get("XDG_CONFIG_HOME")
     if xdg:
         return Path(xdg) / "meteorcli"
     return Path.home() / ".config" / "meteorcli"
+
+
+def chown_config_dir(path: Path) -> None:
+    """If running under sudo, give the invoking user ownership of their config."""
+    sudo_user = _sudo_user()
+    if not sudo_user or not _is_root() or not path.exists():
+        return
+    try:
+        import pwd
+
+        pw = pwd.getpwnam(sudo_user)
+    except (ImportError, KeyError, OSError):
+        return
+    os.chown(path, pw.pw_uid, pw.pw_gid)
+    for dirpath, dirnames, filenames in os.walk(path):
+        os.chown(dirpath, pw.pw_uid, pw.pw_gid)
+        for name in dirnames + filenames:
+            os.chown(os.path.join(dirpath, name), pw.pw_uid, pw.pw_gid)
 
 
 @dataclass

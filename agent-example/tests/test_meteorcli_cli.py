@@ -33,8 +33,17 @@ def test_default_config_dir_user(monkeypatch, tmp_path) -> None:
 
 
 def test_default_config_dir_root(monkeypatch) -> None:
+    monkeypatch.delenv("SUDO_USER", raising=False)
     monkeypatch.setattr("meteorcli.config.os.geteuid", lambda: 0)
     assert default_config_dir() == Path("/etc/meteorcli")
+
+
+def test_sudo_config_uses_invoking_user_dir(monkeypatch, tmp_path) -> None:
+    home = tmp_path / "home" / "pi"
+    monkeypatch.setattr("meteorcli.config.os.geteuid", lambda: 0)
+    monkeypatch.setenv("SUDO_USER", "pi")
+    monkeypatch.setattr("meteorcli.config._user_home", lambda username=None: home)
+    assert default_config_dir() == home / ".config" / "meteorcli"
 
 
 def test_user_config_writes_without_root(tmp_path, monkeypatch, capsys) -> None:

@@ -92,6 +92,13 @@ def test_enroll_check_accepts_valid_key(client: TestClient, db_session: Session)
         headers={"Authorization": f"Bearer {created['api_key']}"},
     )
     assert response.status_code == 200, response.text
+    posted = client.post(
+        "/api/v1/agent/enroll/check",
+        headers={"Authorization": f"Bearer {created['api_key']}"},
+        json={},
+    )
+    assert posted.status_code == 200, posted.text
+    assert response.status_code == 200, response.text
     body = response.json()
     assert body["ok"] is True
     assert body["organization_id"] == str(org.id)

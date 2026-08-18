@@ -91,6 +91,7 @@ def _warn_insecure_transport(request: Request, settings: Settings) -> None:
 
 
 @router.get("/enroll/check", response_model=AgentEnrollCheckResponse)
+@router.post("/enroll/check", response_model=AgentEnrollCheckResponse)
 def enroll_check(
     api_key: CurrentApiKey,
     service: EnrollmentSvc,

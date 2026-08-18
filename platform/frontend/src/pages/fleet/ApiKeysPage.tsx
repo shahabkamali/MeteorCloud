@@ -26,7 +26,7 @@ import { canManageFleet } from "@/lib/permissions";
 
 function buildConfigCommand(domain: string, apiKey: string): string {
   return [
-    "sudo meterocli config \\",
+    "sudo meteorcli config \\",
     `  --domain ${domain} \\`,
     `  --api-key ${apiKey}`,
   ].join("\n");
@@ -308,8 +308,8 @@ export function ApiKeysPage() {
           <div className="md:col-span-2">
             <p className="text-sm font-medium">API keys</p>
             <p className="text-xs text-muted-foreground">
-              Devices use a key with <code>meterocli config</code> and{" "}
-              <code>meterocli request</code> to ask to join this organization.
+              Devices use a key with <code>meteorcli config</code> and{" "}
+              <code>meteorcli request</code> to ask to join this organization.
             </p>
           </div>
           <div>
@@ -410,7 +410,7 @@ export function ApiKeysPage() {
       {createdKey && (
         <OneTimeSecretDialog
           title="API key created"
-          description="Copy this key now and configure meterocli with it. For security it will not be shown again."
+          description="Copy this key now and configure meteorcli with it. For security it will not be shown again."
           secret={createdKey.api_key}
           command={buildConfigCommand(domain, createdKey.api_key)}
           onClose={() => setCreatedKey(null)}

@@ -1,4 +1,4 @@
-"""Filesystem locations and API-base derivation for meterocli."""
+"""Filesystem locations and API-base derivation for meteorcli."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ from pathlib import Path
 
 from edge_agent.config import AgentConfig, AgentPaths, load_config, save_config
 
-DEFAULT_CONFIG_DIR = Path("/etc/meterocli")
+DEFAULT_CONFIG_DIR = Path("/etc/meteorcli")
 
 
 @dataclass

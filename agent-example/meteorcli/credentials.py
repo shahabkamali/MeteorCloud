@@ -1,4 +1,4 @@
-"""Owner-only secret files for meterocli (API key and claim secret)."""
+"""Owner-only secret files for meteorcli (API key and claim secret)."""
 
 from __future__ import annotations
 

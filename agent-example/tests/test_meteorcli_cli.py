@@ -1,11 +1,12 @@
-"""Tests for the `meterocli` command-line interface."""
+"""Tests for the `meteorcli` command-line interface."""
 
 from __future__ import annotations
 
 import pytest
 
-from meterocli import cli as meterocli
-from meterocli.config import derive_api_base
+from edge_agent.client import AgentApiError
+from meteorcli import cli as meteorcli
+from meteorcli.config import derive_api_base
 from tests.conftest import FakeClient
 
 
@@ -16,8 +17,8 @@ def test_derive_api_base() -> None:
 
 
 def test_config_and_show(tmp_path, capsys) -> None:
-    config_dir = tmp_path / "meterocli"
-    code = meterocli.main(
+    config_dir = tmp_path / "meteorcli"
+    code = meteorcli.main(
         [
             "--config-dir",
             str(config_dir),
@@ -32,7 +33,7 @@ def test_config_and_show(tmp_path, capsys) -> None:
     assert (config_dir / "api-key").read_text(encoding="utf-8") == "key_secret"
     assert (config_dir / "api-key").stat().st_mode & 0o777 == 0o600
 
-    code = meterocli.main(["--config-dir", str(config_dir), "config", "--show"])
+    code = meteorcli.main(["--config-dir", str(config_dir), "config", "--show"])
     assert code == 0
     out = capsys.readouterr().out
     assert "meteorxx.com" in out
@@ -42,11 +43,11 @@ def test_config_and_show(tmp_path, capsys) -> None:
 
 
 def test_register_status_run_flow(tmp_path, monkeypatch, capsys) -> None:
-    config_dir = tmp_path / "meterocli"
+    config_dir = tmp_path / "meteorcli"
     client = FakeClient()
-    monkeypatch.setattr(meterocli, "EdgeClient", lambda server_url, **_: client)
+    monkeypatch.setattr(meteorcli, "EdgeClient", lambda server_url, **_: client)
 
-    code = meterocli.main(
+    code = meteorcli.main(
         [
             "--config-dir",
             str(config_dir),
@@ -62,19 +63,19 @@ def test_register_status_run_flow(tmp_path, monkeypatch, capsys) -> None:
     assert "Registered device device-1" in out
     assert "dev_secret-value" not in out
 
-    code = meterocli.main(["--config-dir", str(config_dir), "status"])
+    code = meteorcli.main(["--config-dir", str(config_dir), "status"])
     assert code == 0
     status_out = capsys.readouterr().out
     assert "Device ID:      device-1" in status_out
     assert "Credential:     present" in status_out
 
-    code = meterocli.main(["--config-dir", str(config_dir), "run", "--once"])
+    code = meteorcli.main(["--config-dir", str(config_dir), "run", "--once"])
     assert code == 0
     assert "status: online" in capsys.readouterr().out
 
 
 def test_register_uses_configured_domain(tmp_path, monkeypatch) -> None:
-    config_dir = tmp_path / "meterocli"
+    config_dir = tmp_path / "meteorcli"
     client = FakeClient()
     captured: list[str] = []
 
@@ -83,15 +84,15 @@ def test_register_uses_configured_domain(tmp_path, monkeypatch) -> None:
         client.server_url = server_url.rstrip("/")
         return client
 
-    monkeypatch.setattr(meterocli, "EdgeClient", fake_client)
-    meterocli.main(["--config-dir", str(config_dir), "config", "--domain", "meteorxx.com"])
-    code = meterocli.main(["--config-dir", str(config_dir), "register", "--token", "reg_abc"])
+    monkeypatch.setattr(meteorcli, "EdgeClient", fake_client)
+    meteorcli.main(["--config-dir", str(config_dir), "config", "--domain", "meteorxx.com"])
+    code = meteorcli.main(["--config-dir", str(config_dir), "register", "--token", "reg_abc"])
     assert code == 0
     assert captured[-1] == "https://api.meteorxx.com"
 
 
 def test_request_polls_until_approved(tmp_path, monkeypatch, capsys) -> None:
-    config_dir = tmp_path / "meterocli"
+    config_dir = tmp_path / "meteorcli"
     client = FakeClient()
     client.enroll_poll_responses = [
         {"status": "pending", "poll_interval_seconds": 0},
@@ -105,10 +106,10 @@ def test_request_polls_until_approved(tmp_path, monkeypatch, capsys) -> None:
             "poll_interval_seconds": 0,
         },
     ]
-    monkeypatch.setattr(meterocli, "EdgeClient", lambda server_url, **_: client)
-    monkeypatch.setattr(meterocli.time, "sleep", lambda *_: None)
+    monkeypatch.setattr(meteorcli, "EdgeClient", lambda server_url, **_: client)
+    monkeypatch.setattr(meteorcli.time, "sleep", lambda *_: None)
 
-    code = meterocli.main(
+    code = meteorcli.main(
         [
             "--config-dir",
             str(config_dir),
@@ -133,15 +134,15 @@ def test_request_polls_until_approved(tmp_path, monkeypatch, capsys) -> None:
 
 
 def test_request_rejected(tmp_path, monkeypatch, capsys) -> None:
-    config_dir = tmp_path / "meterocli"
+    config_dir = tmp_path / "meteorcli"
     client = FakeClient()
     client.enroll_poll_responses = [
         {"status": "rejected", "rejection_reason": "Unknown hardware", "poll_interval_seconds": 0}
     ]
-    monkeypatch.setattr(meterocli, "EdgeClient", lambda server_url, **_: client)
-    monkeypatch.setattr(meterocli.time, "sleep", lambda *_: None)
+    monkeypatch.setattr(meteorcli, "EdgeClient", lambda server_url, **_: client)
+    monkeypatch.setattr(meteorcli.time, "sleep", lambda *_: None)
 
-    code = meterocli.main(
+    code = meteorcli.main(
         [
             "--config-dir",
             str(config_dir),
@@ -157,25 +158,102 @@ def test_request_rejected(tmp_path, monkeypatch, capsys) -> None:
 
 
 def test_status_without_registration(tmp_path, capsys) -> None:
-    code = meterocli.main(["--config-dir", str(tmp_path / "empty"), "status"])
+    code = meteorcli.main(["--config-dir", str(tmp_path / "empty"), "status"])
     assert code == 1
     assert "Not configured" in capsys.readouterr().out
 
 
+def test_connection_success(tmp_path, monkeypatch, capsys) -> None:
+    config_dir = tmp_path / "meteorcli"
+    client = FakeClient()
+    monkeypatch.setattr(meteorcli, "EdgeClient", lambda server_url, **_: client)
+
+    meteorcli.main(
+        [
+            "--config-dir",
+            str(config_dir),
+            "config",
+            "--domain",
+            "meteorxx.com",
+            "--api-key",
+            "key_secret",
+        ]
+    )
+    code = meteorcli.main(["--config-dir", str(config_dir), "test"])
+    assert code == 0
+    out = capsys.readouterr().out
+    assert "https://api.meteorxx.com" in out
+    assert "Server:         ok" in out
+    assert "API key:        ok" in out
+    assert "Acme Energy" in out
+    assert "key_secret" not in out
+    assert client.check_calls[0]["api_key"] == "key_secret"
+
+
+def test_connection_unreachable(tmp_path, monkeypatch, capsys) -> None:
+    config_dir = tmp_path / "meteorcli"
+    client = FakeClient()
+    client.health_error = AgentApiError(0, "network_error", "connection refused")
+    monkeypatch.setattr(meteorcli, "EdgeClient", lambda server_url, **_: client)
+    meteorcli.main(["--config-dir", str(config_dir), "config", "--domain", "meteorxx.com"])
+
+    code = meteorcli.main(["--config-dir", str(config_dir), "test"])
+    assert code == 1
+    assert "cannot reach" in capsys.readouterr().err
+    assert client.check_calls == []
+
+
+def test_connection_rejects_invalid_key(tmp_path, monkeypatch, capsys) -> None:
+    config_dir = tmp_path / "meteorcli"
+    client = FakeClient()
+    client.check_error = AgentApiError(401, "invalid_api_key", "The enrollment API key is invalid.")
+    monkeypatch.setattr(meteorcli, "EdgeClient", lambda server_url, **_: client)
+    meteorcli.main(
+        [
+            "--config-dir",
+            str(config_dir),
+            "config",
+            "--domain",
+            "meteorxx.com",
+            "--api-key",
+            "key_bad",
+        ]
+    )
+    code = meteorcli.main(["--config-dir", str(config_dir), "test"])
+    assert code == 1
+    captured = capsys.readouterr()
+    assert "Server:         ok" in captured.out
+    assert "invalid" in captured.err
+
+
+def test_connection_requires_api_key(tmp_path, monkeypatch, capsys) -> None:
+    config_dir = tmp_path / "meteorcli"
+    client = FakeClient()
+    monkeypatch.setattr(meteorcli, "EdgeClient", lambda server_url, **_: client)
+    meteorcli.main(["--config-dir", str(config_dir), "config", "--domain", "meteorxx.com"])
+
+    code = meteorcli.main(["--config-dir", str(config_dir), "test"])
+    assert code == 1
+    captured = capsys.readouterr()
+    assert "Server:         ok" in captured.out
+    assert "API key is required" in captured.err
+
+
 def test_version(capsys) -> None:
     with pytest.raises(SystemExit) as excinfo:
-        meterocli.main(["--version"])
+        meteorcli.main(["--version"])
     assert excinfo.value.code == 0
-    assert "meterocli" in capsys.readouterr().out
+    assert "meteorcli" in capsys.readouterr().out
 
 
 def test_help_lists_commands(capsys) -> None:
     with pytest.raises(SystemExit) as excinfo:
-        meterocli.main(["--help"])
+        meteorcli.main(["--help"])
     assert excinfo.value.code == 0
     help_out = capsys.readouterr().out
     assert "register" in help_out
     assert "request" in help_out
     assert "config" in help_out
+    assert "test" in help_out
     assert "run" in help_out
     assert "status" in help_out

@@ -29,7 +29,7 @@ const PAGE_SIZE = 10;
 
 function buildRegisterCommand(serverOrigin: string, token: string): string {
   return [
-    "sudo meterocli register \\",
+    "sudo meteorcli register \\",
     `  --server ${serverOrigin} \\`,
     `  --token ${token}`,
   ].join("\n");

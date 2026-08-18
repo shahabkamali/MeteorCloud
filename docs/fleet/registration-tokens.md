@@ -44,5 +44,5 @@ the **owner** or **admin** role.
 
 Create tokens under **Fleet → Devices → Add device**. After creation a dialog
 shows the plaintext token **once**, with copy buttons and a ready-to-run
-`meterocli register` command built from the current site origin. The dialog
+`meteorcli register` command built from the current site origin. The dialog
 recommends `--token-file` and clears the secret from memory when closed.

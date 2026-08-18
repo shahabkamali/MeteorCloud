@@ -28,11 +28,13 @@ from app.modules.fleet.repository import (
     EnrollmentApiKeyRepository,
 )
 from app.modules.fleet.schemas import (
+    AgentEnrollCheckResponse,
     AgentEnrollPollRequest,
     AgentEnrollPollResponse,
     AgentEnrollRequest,
     AgentEnrollResponse,
 )
+from app.modules.organizations.models import Organization
 from app.modules.fleet.tokens import (
     generate_claim_secret,
     generate_device_token,
@@ -113,6 +115,21 @@ class EnrollmentService:
             status="pending",
             poll_interval_seconds=self.settings.enrollment_poll_interval_seconds,
             expires_at=request.expires_at,
+        )
+
+    def check(self, *, api_key: EnrollmentApiKey) -> AgentEnrollCheckResponse:
+        organization = self.session.get(Organization, api_key.organization_id)
+        organization_name = organization.name if organization is not None else ""
+        api_key.last_used_at = datetime.now(UTC)
+        self.api_keys.update(api_key)
+        self.session.commit()
+        return AgentEnrollCheckResponse(
+            ok=True,
+            organization_id=api_key.organization_id,
+            organization_name=organization_name,
+            key_name=api_key.name,
+            key_prefix=api_key.key_prefix,
+            expires_at=api_key.expires_at,
         )
 
     # -------------------------------------------------------------- poll

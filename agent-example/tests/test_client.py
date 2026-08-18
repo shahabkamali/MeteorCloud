@@ -65,3 +65,21 @@ def test_network_error_is_mapped(monkeypatch) -> None:
     with pytest.raises(AgentApiError) as excinfo:
         client.heartbeat(device_token="dev_x", payload={})
     assert excinfo.value.code == "network_error"
+
+
+def test_health_success(monkeypatch) -> None:
+    client = EdgeClient("http://localhost:8000")
+
+    class FakeResponse(io.BytesIO):
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+    def fake_urlopen(request, timeout):  # noqa: ARG001
+        assert request.get_method() == "GET"
+        return FakeResponse(json.dumps({"status": "ok"}).encode("utf-8"))
+
+    monkeypatch.setattr("urllib.request.urlopen", fake_urlopen)
+    assert client.health()["status"] == "ok"

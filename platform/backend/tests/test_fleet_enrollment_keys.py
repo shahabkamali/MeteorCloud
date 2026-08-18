@@ -77,6 +77,39 @@ def test_revoke_enrollment_key(client: TestClient, db_session: Session) -> None:
     assert response.json()["error"]["code"] == "invalid_api_key"
 
 
+def test_enroll_check_accepts_valid_key(client: TestClient, db_session: Session) -> None:
+    owner = create_user(db_session, email="owner@example.com")
+    org, _ = create_org_with_owner(db_session, owner)
+    headers = auth_header(client, "owner@example.com")
+    created = client.post(
+        f"/api/v1/organizations/{org.id}/enrollment-keys",
+        headers=headers,
+        json={"name": "Field techs"},
+    ).json()
+
+    response = client.get(
+        "/api/v1/agent/enroll/check",
+        headers={"Authorization": f"Bearer {created['api_key']}"},
+    )
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["ok"] is True
+    assert body["organization_id"] == str(org.id)
+    assert body["organization_name"] == "Acme Energy"
+    assert body["key_name"] == "Field techs"
+    assert body["key_prefix"] == created["key_prefix"]
+    assert "api_key" not in body
+
+
+def test_enroll_check_rejects_invalid_key(client: TestClient) -> None:
+    response = client.get(
+        "/api/v1/agent/enroll/check",
+        headers={"Authorization": "Bearer key_does-not-exist"},
+    )
+    assert response.status_code == 401
+    assert response.json()["error"]["code"] == "invalid_api_key"
+
+
 def test_create_key_rejects_past_expiry(client: TestClient, db_session: Session) -> None:
     owner = create_user(db_session, email="owner@example.com")
     org, _ = create_org_with_owner(db_session, owner)

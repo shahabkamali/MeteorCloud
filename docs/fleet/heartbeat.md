@@ -57,8 +57,8 @@ heartbeat does not immediately flip a device offline.
 ## Reference agent
 
 ```bash
-meterocli run          # loop using the advertised interval
-meterocli run --once   # single heartbeat
+meteorcli run          # loop using the advertised interval
+meteorcli run --once   # single heartbeat
 ```
 
 The loop uses bounded exponential backoff on transient failures and stops if the

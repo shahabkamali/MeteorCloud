@@ -420,6 +420,15 @@ class AgentEnrollResponse(BaseModel):
     expires_at: datetime | None
 
 
+class AgentEnrollCheckResponse(BaseModel):
+    ok: bool
+    organization_id: uuid.UUID
+    organization_name: str
+    key_name: str
+    key_prefix: str
+    expires_at: datetime | None
+
+
 class AgentEnrollPollRequest(BaseModel):
     request_id: uuid.UUID
     claim_secret: str = Field(min_length=1)

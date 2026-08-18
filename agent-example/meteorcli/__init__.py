@@ -1,4 +1,4 @@
-"""MeteorCloud device CLI (meterocli)."""
+"""MeteorCloud device CLI (meteorcli)."""
 
 from __future__ import annotations
 

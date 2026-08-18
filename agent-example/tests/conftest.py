@@ -44,6 +44,22 @@ class FakeClient:
         }
         self.enroll_poll_responses: list[dict[str, Any]] = []
         self.enroll_request_error: AgentApiError | None = None
+        self.health_response: dict[str, Any] = {
+            "status": "ok",
+            "service": "edge-platform-backend",
+            "version": "0.1.0",
+        }
+        self.health_error: AgentApiError | None = None
+        self.check_calls: list[dict[str, Any]] = []
+        self.check_response: dict[str, Any] = {
+            "ok": True,
+            "organization_id": "org-1",
+            "organization_name": "Acme Energy",
+            "key_name": "Field techs",
+            "key_prefix": "key_abcdef",
+            "expires_at": None,
+        }
+        self.check_error: AgentApiError | None = None
 
     def register(
         self,
@@ -80,6 +96,17 @@ class FakeClient:
         if self.enroll_poll_responses:
             return self.enroll_poll_responses.pop(0)
         return {"status": "pending", "poll_interval_seconds": 1}
+
+    def health(self) -> dict[str, Any]:
+        if self.health_error is not None:
+            raise self.health_error
+        return self.health_response
+
+    def check_api_key(self, *, api_key: str) -> dict[str, Any]:
+        self.check_calls.append({"api_key": api_key})
+        if self.check_error is not None:
+            raise self.check_error
+        return self.check_response
 
 
 @pytest.fixture

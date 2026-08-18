@@ -90,7 +90,7 @@ jobs:
       - name: Lint (ruff)
         run: python -m ruff check .
       - name: Typecheck (compileall)
-        run: python -m compileall meterocli edge_agent tests
+        run: python -m compileall meteorcli edge_agent tests
       - name: Test (pytest)
         run: python -m pytest -q
 

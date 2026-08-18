@@ -28,19 +28,23 @@ class EdgeClient:
         self.server_url = server_url.rstrip("/")
         self.timeout = timeout
 
-    def _post(
+    def _request(
         self,
+        method: str,
         path: str,
-        body: dict[str, Any],
+        body: dict[str, Any] | None = None,
         *,
         bearer: str | None = None,
     ) -> dict[str, Any]:
         url = f"{self.server_url}{path}"
-        data = json.dumps(body).encode("utf-8")
-        headers = {"Content-Type": "application/json", "Accept": "application/json"}
+        headers = {"Accept": "application/json"}
+        data = None
+        if body is not None:
+            data = json.dumps(body).encode("utf-8")
+            headers["Content-Type"] = "application/json"
         if bearer:
             headers["Authorization"] = f"Bearer {bearer}"
-        request = urllib.request.Request(url, data=data, headers=headers, method="POST")
+        request = urllib.request.Request(url, data=data, headers=headers, method=method)
         try:
             with urllib.request.urlopen(request, timeout=self.timeout) as response:
                 raw = response.read().decode("utf-8")
@@ -49,6 +53,24 @@ class EdgeClient:
             raise self._to_api_error(exc) from exc
         except urllib.error.URLError as exc:  # network-level failure
             raise AgentApiError(0, "network_error", str(exc.reason)) from exc
+
+    def _post(
+        self,
+        path: str,
+        body: dict[str, Any],
+        *,
+        bearer: str | None = None,
+    ) -> dict[str, Any]:
+        return self._request("POST", path, body, bearer=bearer)
+
+    def _get(self, path: str, *, bearer: str | None = None) -> dict[str, Any]:
+        return self._request("GET", path, bearer=bearer)
+
+    def health(self) -> dict[str, Any]:
+        return self._get("/api/v1/health")
+
+    def check_api_key(self, *, api_key: str) -> dict[str, Any]:
+        return self._get("/api/v1/agent/enroll/check", bearer=api_key)
 
     def enroll_request(
         self,

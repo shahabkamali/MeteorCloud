@@ -18,6 +18,7 @@ from app.modules.fleet.dependencies import (
     enforce_registration_rate_limit,
 )
 from app.modules.fleet.schemas import (
+    AgentEnrollCheckResponse,
     AgentEnrollPollRequest,
     AgentEnrollPollResponse,
     AgentEnrollRequest,
@@ -87,6 +88,14 @@ def _warn_insecure_transport(request: Request, settings: Settings) -> None:
         "Enable REGISTRATION_REQUIRE_HTTPS in production.",
         request.url.scheme,
     )
+
+
+@router.get("/enroll/check", response_model=AgentEnrollCheckResponse)
+def enroll_check(
+    api_key: CurrentApiKey,
+    service: EnrollmentSvc,
+) -> AgentEnrollCheckResponse:
+    return service.check(api_key=api_key)
 
 
 @router.post(

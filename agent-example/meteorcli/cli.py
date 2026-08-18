@@ -1,8 +1,9 @@
-"""``meterocli`` command-line interface.
+"""``meteorcli`` command-line interface.
 
 Subcommands
 -----------
   config     Store the control-plane domain and API key.
+  test       Check that the server is reachable and the API key is valid.
   register   Register this device with a registration token (path 1).
   request    Ask to join; wait for admin approval; save the device credential.
   run        Send periodic heartbeats.
@@ -28,24 +29,24 @@ from edge_agent.credentials import read_device_token, read_registration_token_fi
 from edge_agent.heartbeat import run_loop, send_heartbeat
 from edge_agent.inventory import collect_inventory
 from edge_agent.registration import register
-from meterocli import __version__
-from meterocli.config import (
+from meteorcli import __version__
+from meteorcli.config import (
     DEFAULT_CONFIG_DIR,
     CliPaths,
     persist_connection,
     resolve_server_url,
 )
-from meterocli.credentials import read_secret, remove_secret, write_secret
+from meteorcli.credentials import read_secret, remove_secret, write_secret
 
-logger = logging.getLogger("meterocli")
+logger = logging.getLogger("meteorcli")
 
-PROG = "meterocli"
+PROG = "meteorcli"
 
-ENV_SERVER = "METEROCLI_SERVER"
-ENV_DOMAIN = "METEROCLI_DOMAIN"
-ENV_TOKEN = "METEROCLI_TOKEN"
-ENV_API_KEY = "METEROCLI_API_KEY"
-ENV_CONFIG_DIR = "METEROCLI_CONFIG_DIR"
+ENV_SERVER = "METEORCLI_SERVER"
+ENV_DOMAIN = "METEORCLI_DOMAIN"
+ENV_TOKEN = "METEORCLI_TOKEN"
+ENV_API_KEY = "METEORCLI_API_KEY"
+ENV_CONFIG_DIR = "METEORCLI_CONFIG_DIR"
 
 
 def _paths_from_args(args: argparse.Namespace) -> CliPaths:
@@ -115,6 +116,7 @@ def _cmd_config(args: argparse.Namespace) -> int:
     if api_key:
         write_secret(paths.api_key_path, api_key)
     print(f"Configuration saved under {paths.config_path.parent}")
+    print(f"Next: verify with '{PROG} test'.")
     return 0
 
 
@@ -265,6 +267,53 @@ def _cmd_request(args: argparse.Namespace) -> int:
         return 1
 
 
+def _cmd_test(args: argparse.Namespace) -> int:
+    paths = _paths_from_args(args)
+    config = _load(paths)
+    server = _resolve_server(args, config)
+    if not server:
+        print(
+            f"error: a server URL is required "
+            f"(use --server, {ENV_SERVER}, or '{PROG} config --domain').",
+            file=sys.stderr,
+        )
+        return 2
+
+    client = EdgeClient(server)
+    try:
+        health = client.health()
+    except AgentApiError as error:
+        print(f"error: cannot reach {server}: {error.message}", file=sys.stderr)
+        return 1
+
+    print(f"API base:       {server}")
+    print(f"Server:         {health.get('status', 'ok')}")
+
+    api_key = _resolve_api_key(args, paths)
+    if not api_key:
+        print("API key:        MISSING")
+        print(
+            f"error: an API key is required "
+            f"(use --api-key, {ENV_API_KEY}, or '{PROG} config --api-key').",
+            file=sys.stderr,
+        )
+        return 1
+
+    try:
+        checked = client.check_api_key(api_key=api_key)
+    except AgentApiError as error:
+        print(f"API key:        rejected ({error.message})", file=sys.stderr)
+        return 1
+
+    print("API key:        ok")
+    print(f"Organization:   {checked.get('organization_name') or checked.get('organization_id')}")
+    print(f"Key name:       {checked.get('key_name') or '—'}")
+    prefix = checked.get("key_prefix")
+    if prefix:
+        print(f"Key prefix:     {prefix}…")
+    return 0
+
+
 def _load_or_fail(paths: CliPaths) -> tuple[AgentConfig, str] | None:
     config = _load(paths)
     if config is None or not config.device_id:
@@ -346,6 +395,7 @@ def build_parser() -> argparse.ArgumentParser:
         epilog=(
             "Examples:\n"
             f"  {PROG} config --domain meteorxx.com --api-key key_XXXX\n"
+            f"  {PROG} test\n"
             f"  {PROG} request --name edge-01\n"
             f"  {PROG} register --token reg_XXXX\n"
             f"  {PROG} run\n"
@@ -356,7 +406,7 @@ def build_parser() -> argparse.ArgumentParser:
             f"  {ENV_SERVER}       Override the API base URL.\n"
             f"  {ENV_API_KEY}      API key.\n"
             f"  {ENV_TOKEN}        Registration token (used if --token is omitted).\n"
-            f"  {ENV_CONFIG_DIR}   Config/credential directory (default: /etc/meterocli).\n"
+            f"  {ENV_CONFIG_DIR}   Config/credential directory (default: /etc/meteorcli).\n"
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
@@ -365,7 +415,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--config-dir",
         default=None,
         metavar="DIR",
-        help="Directory for device config and credentials (default: /etc/meterocli).",
+        help="Directory for device config and credentials (default: /etc/meteorcli).",
     )
     subparsers = parser.add_subparsers(dest="command", metavar="<command>", required=True)
 
@@ -398,6 +448,28 @@ def build_parser() -> argparse.ArgumentParser:
         help="Print the persisted configuration (never prints secrets).",
     )
     config_parser.set_defaults(func=_cmd_config)
+
+    test_parser = subparsers.add_parser(
+        "test",
+        help="Check that the server is reachable and the API key is valid.",
+        description=(
+            "Reach the control plane and authenticate with the stored API key. "
+            "Does not create an enrollment request."
+        ),
+    )
+    test_parser.add_argument(
+        "--server",
+        default=None,
+        metavar="URL",
+        help=f"Control-plane base URL (or set {ENV_SERVER}).",
+    )
+    test_parser.add_argument(
+        "--api-key",
+        default=None,
+        metavar="KEY",
+        help=f"API key (or set {ENV_API_KEY} / stored key).",
+    )
+    test_parser.set_defaults(func=_cmd_test)
 
     register_parser = subparsers.add_parser(
         "register",

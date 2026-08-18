@@ -10,8 +10,8 @@ documented in [device-registration.md](device-registration.md).
 ## Flow
 
 1. An administrator creates an [API key](enrollment-api-keys.md) under **Fleet → API keys**.
-2. The device is configured (`meterocli config --domain … --api-key …`) and runs
-   `meterocli request`.
+2. The device is configured (`meteorcli config --domain … --api-key …`) and runs
+   `meteorcli request`.
 3. `POST /api/v1/agent/enroll/request` (Bearer `key_…`) creates a pending
    request and returns a one-time `claim_secret` (`clm_…`).
 4. The administrator reviews the request on **Fleet → API keys** and approves or rejects it.
@@ -21,6 +21,14 @@ documented in [device-registration.md](device-registration.md).
    registration), and returns the token once.
 
 ## Device endpoints
+
+```
+GET /api/v1/agent/enroll/check
+Authorization: Bearer key_...
+```
+
+Returns the organization and key label if the key is valid. Used by
+`meteorcli test`. Does not create an enrollment request.
 
 ```
 POST /api/v1/agent/enroll/request
@@ -75,10 +83,11 @@ Reject body (optional): `{ "reason" }`. Mutation requires **owner** or **admin**
 - Pending requests expire after `ENROLLMENT_REQUEST_TTL_SECONDS` (default 3600).
 - HTTP is allowed but warned; `REGISTRATION_REQUIRE_HTTPS=true` rejects it.
 
-## Using meterocli
+## Using meteorcli
 
 ```bash
-sudo meterocli config --domain meteorxx.com --api-key key_...
-sudo meterocli request --name edge-01
-sudo meterocli run
+sudo meteorcli config --domain meteorxx.com --api-key key_...
+sudo meteorcli test
+sudo meteorcli request --name edge-01
+sudo meteorcli run
 ```

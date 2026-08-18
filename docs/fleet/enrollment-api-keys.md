@@ -32,11 +32,12 @@ When creating a key you may set:
 
 Create and revoke require **owner** or **admin**. Any member may list keys.
 
-## Using meterocli
+## Using meteorcli
 
 ```bash
-sudo meterocli config --domain meteorxx.com --api-key key_...
-sudo meterocli request --name edge-01
+sudo meteorcli config --domain meteorxx.com --api-key key_...
+sudo meteorcli test
+sudo meteorcli request --name edge-01
 ```
 
 See [device-request-enrollment.md](device-request-enrollment.md).

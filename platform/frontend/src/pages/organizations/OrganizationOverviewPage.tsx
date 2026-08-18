@@ -35,6 +35,9 @@ export function OrganizationOverviewPage() {
         </div>
         <div className="flex flex-wrap gap-2">
           <Button variant="secondary" asChild>
+            <Link to={`/organizations/${organization.id}/devices`}>Fleet</Link>
+          </Button>
+          <Button variant="secondary" asChild>
             <Link to={`/organizations/${organization.id}/members`}>Members</Link>
           </Button>
           {canUpdateOrganization(organization.current_user_role) && (

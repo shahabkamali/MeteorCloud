@@ -17,6 +17,9 @@ from app.core.security import hash_password
 from app.main import create_app
 
 # Ensure metadata includes domain models.
+from app.modules.fleet import models as _fleet_models  # noqa: F401
+from app.modules.fleet.dependencies import get_rate_limiter
+from app.modules.fleet.rate_limit import InMemoryRateLimiter
 from app.modules.identity import models as _identity_models  # noqa: F401
 from app.modules.identity.models import User
 from app.modules.organizations import models as _organization_models  # noqa: F401
@@ -60,6 +63,11 @@ def client(db_session: Session) -> Generator[TestClient]:
             pass
 
     application.dependency_overrides[get_db] = override_get_db
+    # Permissive limiter by default; tests that exercise rate limiting override
+    # this on ``client.app.dependency_overrides``.
+    application.dependency_overrides[get_rate_limiter] = lambda: InMemoryRateLimiter(
+        limit=10_000, window_seconds=60
+    )
     with TestClient(application) as test_client:
         yield test_client
     application.dependency_overrides.clear()
@@ -122,3 +130,20 @@ def create_org_with_owner(
     session.refresh(organization)
     session.refresh(membership)
     return organization, membership
+
+
+def add_member(
+    session: Session,
+    organization: Organization,
+    user: User,
+    role: OrganizationRole,
+) -> OrganizationMembership:
+    membership = OrganizationMembership(
+        organization_id=organization.id,
+        user_id=user.id,
+        role=role,
+    )
+    session.add(membership)
+    session.commit()
+    session.refresh(membership)
+    return membership

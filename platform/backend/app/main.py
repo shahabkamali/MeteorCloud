@@ -13,6 +13,8 @@ from app.api.health import router as health_router
 from app.core.config import get_settings
 from app.core.errors import register_exception_handlers
 from app.core.logging import configure_logging
+from app.modules.fleet.agent_router import router as agent_router
+from app.modules.fleet.router import router as fleet_router
 from app.modules.identity.router import router as identity_router
 from app.modules.organizations.router import router as organizations_router
 
@@ -50,6 +52,8 @@ def create_app() -> FastAPI:
     application.include_router(health_router)
     application.include_router(identity_router)
     application.include_router(organizations_router)
+    application.include_router(fleet_router)
+    application.include_router(agent_router)
 
     return application
 

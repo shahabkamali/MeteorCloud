@@ -89,6 +89,12 @@ make ansible-check
 | **Architecture** | [docs/architecture.md](docs/architecture.md) |
 | **Development** | [docs/development.md](docs/development.md) |
 | **Auth & orgs** | [docs/identity-and-organizations.md](docs/identity-and-organizations.md) |
+| **Fleet: device types & groups** | [docs/fleet/device-types.md](docs/fleet/device-types.md) |
+| **Fleet: registration tokens** | [docs/fleet/registration-tokens.md](docs/fleet/registration-tokens.md) |
+| **Fleet: device registration** | [docs/fleet/device-registration.md](docs/fleet/device-registration.md) |
+| **Fleet: device authentication** | [docs/fleet/device-authentication.md](docs/fleet/device-authentication.md) |
+| **Fleet: heartbeat & status** | [docs/fleet/heartbeat.md](docs/fleet/heartbeat.md) |
+| **Reference agent** | [agent-example/README.md](agent-example/README.md) |
 | **Infrastructure** | [infrastructure/README.md](infrastructure/README.md) |
 | **Installer** | [installer/README.md](installer/README.md) |
 
@@ -97,3 +103,4 @@ make ansible-check
 - **Milestone 1** — dev stack, FastAPI/React foundation, installer CLI
 - **Milestone 2** — auth, organizations, memberships, RBAC
 - **Milestone 3** — modular AWS deploy (`cloud_app`, `vpn`), `make up`
+- **Milestone 4** — fleet foundation: device types/groups, registration tokens, device registration & heartbeat, reference agent

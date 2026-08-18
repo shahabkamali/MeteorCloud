@@ -1,9 +1,10 @@
-.PHONY: help dev stop up down plan status-aws test lint format typecheck install-backend install-frontend install-installer clean migrate seed backend-test frontend-test installer-test terraform-check ansible-check
+.PHONY: help dev stop up down plan status-aws test lint format typecheck install-backend install-frontend install-installer install-agent clean migrate seed backend-test frontend-test agent-test installer-test terraform-check ansible-check
 
 COMPOSE := docker compose -f docker-compose.yml -f docker-compose.dev.yml
 BACKEND_DIR := platform/backend
 FRONTEND_DIR := platform/frontend
 INSTALLER_DIR := installer
+AGENT_DIR := agent-example
 INFRA_DIR := infrastructure
 CONFIG ?= installation.yaml
 
@@ -55,7 +56,10 @@ install-frontend: ## Install frontend Node dependencies
 install-installer: ## Install installer Python dependencies
 	cd $(INSTALLER_DIR) && python -m pip install -e ".[dev]"
 
-install: install-backend install-frontend install-installer ## Install all local dependencies
+install-agent: ## Install reference agent Python dependencies
+	cd $(AGENT_DIR) && python -m pip install -e ".[dev]"
+
+install: install-backend install-frontend install-installer install-agent ## Install all local dependencies
 
 backend-test: ## Run backend tests
 	cd $(BACKEND_DIR) && python -m pytest -q
@@ -63,11 +67,16 @@ backend-test: ## Run backend tests
 frontend-test: ## Run frontend tests
 	cd $(FRONTEND_DIR) && npm test -- --run
 
+agent-test: ## Run reference agent tests
+	cd $(AGENT_DIR) && python -m pytest -q
+
 test: ## Run all tests
 	@echo "==> Installer tests"
 	cd $(INSTALLER_DIR) && python -m pytest -q
 	@echo "==> Backend tests"
 	cd $(BACKEND_DIR) && python -m pytest -q
+	@echo "==> Agent tests"
+	cd $(AGENT_DIR) && python -m pytest -q
 	@echo "==> Frontend tests"
 	cd $(FRONTEND_DIR) && npm test -- --run
 
@@ -76,6 +85,8 @@ lint: ## Lint all projects
 	cd $(INSTALLER_DIR) && python -m ruff check .
 	@echo "==> Backend lint"
 	cd $(BACKEND_DIR) && python -m ruff check .
+	@echo "==> Agent lint"
+	cd $(AGENT_DIR) && python -m ruff check .
 	@echo "==> Frontend lint"
 	cd $(FRONTEND_DIR) && npm run lint
 
@@ -84,6 +95,8 @@ format: ## Format all projects
 	cd $(INSTALLER_DIR) && python -m ruff format . && python -m ruff check --fix .
 	@echo "==> Backend format"
 	cd $(BACKEND_DIR) && python -m ruff format . && python -m ruff check --fix .
+	@echo "==> Agent format"
+	cd $(AGENT_DIR) && python -m ruff format . && python -m ruff check --fix .
 	@echo "==> Frontend format"
 	cd $(FRONTEND_DIR) && npm run format
 
@@ -92,6 +105,8 @@ typecheck: ## Run static type checks where configured
 	cd $(BACKEND_DIR) && python -m compileall app tests scripts
 	@echo "==> Installer typecheck (compileall)"
 	cd $(INSTALLER_DIR) && python -m compileall edge_installer tests
+	@echo "==> Agent typecheck (compileall)"
+	cd $(AGENT_DIR) && python -m compileall edge_agent tests
 
 installer-test: ## Run installer tests only
 	cd $(INSTALLER_DIR) && python -m pytest -q

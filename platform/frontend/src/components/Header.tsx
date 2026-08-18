@@ -6,7 +6,7 @@ import { useOrganizationContext } from "@/context/OrganizationContext";
 
 export function Header() {
   const { user, isAuthenticated, logout } = useAuth();
-  const { organizations, selectedOrganization, selectOrganization } = useOrganizationContext();
+  const { selectedOrganization } = useOrganizationContext();
 
   return (
     <header className="border-b border-border/70 bg-white/60 px-6 py-4 backdrop-blur">
@@ -18,19 +18,14 @@ export function Header() {
           </h2>
         </div>
         <div className="flex flex-wrap items-center gap-3">
-          {isAuthenticated && organizations.length > 0 && (
-            <select
-              className="h-9 rounded-md border border-input bg-white px-3 text-sm"
-              value={selectedOrganization?.id ?? ""}
-              onChange={(event) => selectOrganization(event.target.value)}
+          {isAuthenticated && selectedOrganization && (
+            <span
+              className="inline-flex items-center gap-2 rounded-md border border-input bg-white px-3 py-1.5 text-sm font-medium text-foreground"
               aria-label="Selected organization"
             >
-              {organizations.map((organization) => (
-                <option key={organization.id} value={organization.id}>
-                  {organization.name}
-                </option>
-              ))}
-            </select>
+              <span className="text-xs uppercase tracking-wide text-muted-foreground">Org</span>
+              {selectedOrganization.name}
+            </span>
           )}
           {isAuthenticated ? (
             <>

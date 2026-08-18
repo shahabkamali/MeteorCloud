@@ -7,6 +7,10 @@ import { LoginPage } from "@/pages/auth/LoginPage";
 import { RegisterPage } from "@/pages/auth/RegisterPage";
 import { HealthPage } from "@/pages/HealthPage";
 import { LandingPage } from "@/pages/LandingPage";
+import { DeviceDetailPage } from "@/pages/fleet/DeviceDetailPage";
+import { DeviceGroupsPage } from "@/pages/fleet/DeviceGroupsPage";
+import { DevicesPage } from "@/pages/fleet/DevicesPage";
+import { DeviceTypesPage } from "@/pages/fleet/DeviceTypesPage";
 import { OrganizationCreatePage } from "@/pages/organizations/OrganizationCreatePage";
 import { OrganizationListPage } from "@/pages/organizations/OrganizationListPage";
 import { OrganizationMembersPage } from "@/pages/organizations/OrganizationMembersPage";
@@ -62,6 +66,47 @@ export function App() {
             <ProtectedRoute>
               <OrganizationSettingsPage />
             </ProtectedRoute>
+          }
+        />
+        <Route
+          path="organizations/:organizationId/devices"
+          element={
+            <ProtectedRoute>
+              <DevicesPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="organizations/:organizationId/devices/:deviceId"
+          element={
+            <ProtectedRoute>
+              <DeviceDetailPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="organizations/:organizationId/device-types"
+          element={
+            <ProtectedRoute>
+              <DeviceTypesPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="organizations/:organizationId/device-groups"
+          element={
+            <ProtectedRoute>
+              <DeviceGroupsPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="organizations/:organizationId/registration-tokens"
+          element={
+            <Navigate
+              to="../devices"
+              replace
+            />
           }
         />
         <Route path="*" element={<Navigate to="/" replace />} />

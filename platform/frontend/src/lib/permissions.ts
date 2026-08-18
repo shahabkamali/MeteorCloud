@@ -18,6 +18,10 @@ export function canDeleteOrganization(role: string | undefined): boolean {
   return role === "owner";
 }
 
+export function canManageFleet(role: string | undefined): boolean {
+  return role === "owner" || role === "admin";
+}
+
 export function assignableRoles(
   actorRole: string | undefined,
 ): Array<"owner" | "admin" | "member" | "viewer"> {

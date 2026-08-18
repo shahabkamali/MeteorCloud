@@ -42,6 +42,37 @@ class Settings(BaseSettings):
         alias="JWT_ACCESS_TOKEN_EXPIRE_MINUTES",
     )
 
+    redis_url: str = Field(
+        default="redis://localhost:6379/0",
+        alias="REDIS_URL",
+    )
+
+    # Fleet / device connectivity settings.
+    device_heartbeat_interval_seconds: int = Field(
+        default=60,
+        alias="DEVICE_HEARTBEAT_INTERVAL_SECONDS",
+    )
+    device_offline_threshold_seconds: int = Field(
+        default=150,
+        alias="DEVICE_OFFLINE_THRESHOLD_SECONDS",
+    )
+
+    # Device registration rate limiting (fixed window per source IP).
+    registration_rate_limit_requests: int = Field(
+        default=10,
+        alias="REGISTRATION_RATE_LIMIT_REQUESTS",
+    )
+    registration_rate_limit_window_seconds: int = Field(
+        default=60,
+        alias="REGISTRATION_RATE_LIMIT_WINDOW_SECONDS",
+    )
+    # When True, agent registration over plain HTTP is rejected. Left False for
+    # now (Milestone 4) but available so HTTPS can be enforced later.
+    registration_require_https: bool = Field(
+        default=False,
+        alias="REGISTRATION_REQUIRE_HTTPS",
+    )
+
     log_level: str = Field(default="INFO", alias="LOG_LEVEL")
 
     @property

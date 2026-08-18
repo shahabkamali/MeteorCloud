@@ -53,10 +53,10 @@ meteorcli --version
 Environment variables: `METEORCLI_DOMAIN`, `METEORCLI_SERVER`, `METEORCLI_API_KEY`,
 `METEORCLI_TOKEN`, `METEORCLI_CONFIG_DIR` (default: `/etc/meteorcli`).
 
-Given a domain such as `meteorxx.com`, the CLI calls `https://api.meteorxx.com`
-unless `--api-base` / `METEORCLI_SERVER` overrides it. IP addresses and
-`localhost` use HTTP on the host itself (`http://192.168.0.107:8000`), not
-`api.<ip>`. Pass `--http` to force HTTP for a real domain.
+The value you pass to `--domain` is the API host. There is no `api.` subdomain.
+`meteorxx.com` becomes `https://meteorxx.com`. An IP or localhost uses HTTP on
+that address (`http://192.168.0.107:8000`). Pass `--http` to force HTTP for a
+name, or `--api-base` / `METEORCLI_SERVER` to set the origin explicitly.
 
 ## Configure the CLI
 

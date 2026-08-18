@@ -69,9 +69,9 @@ def _host_is_local(host: str) -> bool:
 def derive_api_base(domain: str, *, http: bool = False) -> str:
     """Turn a domain, IP, or URL into an API origin.
 
-    Public hostnames become ``https://api.<domain>``. IP addresses, localhost,
-    and ``--http`` / ``http://…`` stay on the given host and use HTTP so local
-    testing does not require TLS or an ``api.`` DNS record.
+    The configured host *is* the API. Nothing is rewritten to ``api.<host>``.
+    IP addresses and localhost use HTTP. A leftover ``api.<ip>`` value from
+    older configs is stripped so the CLI talks to the IP itself.
     """
     scheme, host = _split_scheme_host(domain)
     if not host:
@@ -79,27 +79,29 @@ def derive_api_base(domain: str, *, http: bool = False) -> str:
     if host.lower().startswith("api.") and _host_is_local(host[4:]):
         host = host[4:]
 
-    use_http = http or scheme == "http" or (scheme is None and _host_is_local(host))
-    if scheme == "https" and not http:
+    local = _host_is_local(host)
+    if http or scheme == "http" or (scheme is None and local):
+        use_http = True
+    elif local:
+        # Older configs stored https://api.<ip>; still use HTTP to the IP.
+        use_http = True
+    else:
         use_http = False
     chosen = "http" if use_http else "https"
-
-    if _host_is_local(host) or host.lower().startswith("api."):
-        return f"{chosen}://{host}"
-    return f"{chosen}://api.{host}"
+    return f"{chosen}://{host}"
 
 
 def resolve_server_url(config: AgentConfig | None, *, override: str | None = None) -> str | None:
     if override:
-        return override.rstrip("/")
+        return derive_api_base(override).rstrip("/")
     if config is None:
         return None
     if config.api_base:
-        return config.api_base.rstrip("/")
+        return derive_api_base(config.api_base).rstrip("/")
     if config.domain:
         return derive_api_base(config.domain)
     if config.server_url:
-        return config.server_url.rstrip("/")
+        return derive_api_base(config.server_url).rstrip("/")
     return None
 
 
@@ -113,8 +115,10 @@ def persist_connection(
     existing = load_config(paths.agent_paths()) or AgentConfig(server_url="")
     if domain is not None:
         existing.domain = domain
+        if api_base is None and not http:
+            existing.api_base = None
     if api_base is not None:
-        existing.api_base = api_base
+        existing.api_base = derive_api_base(api_base, http=http)
     elif http and (domain or existing.domain):
         existing.api_base = derive_api_base(domain or existing.domain or "", http=True)
     resolved = resolve_server_url(existing)

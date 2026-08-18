@@ -11,14 +11,15 @@ from tests.conftest import FakeClient
 
 
 def test_derive_api_base() -> None:
-    assert derive_api_base("meteorxx.com") == "https://api.meteorxx.com"
-    assert derive_api_base("https://www.meteorxx.com") == "https://api.meteorxx.com"
+    assert derive_api_base("meteorxx.com") == "https://meteorxx.com"
+    assert derive_api_base("https://www.meteorxx.com") == "https://meteorxx.com"
     assert derive_api_base("api.meteorxx.com") == "https://api.meteorxx.com"
-    assert derive_api_base("meteorxx.com", http=True) == "http://api.meteorxx.com"
-    assert derive_api_base("http://meteorxx.com") == "http://api.meteorxx.com"
+    assert derive_api_base("meteorxx.com", http=True) == "http://meteorxx.com"
+    assert derive_api_base("http://meteorxx.com") == "http://meteorxx.com"
     assert derive_api_base("192.168.0.107") == "http://192.168.0.107"
     assert derive_api_base("192.168.0.107:8000") == "http://192.168.0.107:8000"
     assert derive_api_base("http://192.168.0.107:8000") == "http://192.168.0.107:8000"
+    assert derive_api_base("https://api.192.168.0.107") == "http://192.168.0.107"
     assert derive_api_base("https://api.192.168.0.107", http=True) == "http://192.168.0.107"
     assert derive_api_base("localhost:8000") == "http://localhost:8000"
 
@@ -44,7 +45,7 @@ def test_config_and_show(tmp_path, capsys) -> None:
     assert code == 0
     out = capsys.readouterr().out
     assert "meteorxx.com" in out
-    assert "https://api.meteorxx.com" in out
+    assert "https://meteorxx.com" in out
     assert "API key:        present" in out
     assert "key_secret" not in out
 
@@ -95,7 +96,7 @@ def test_register_uses_configured_domain(tmp_path, monkeypatch) -> None:
     meteorcli.main(["--config-dir", str(config_dir), "config", "--domain", "meteorxx.com"])
     code = meteorcli.main(["--config-dir", str(config_dir), "register", "--token", "reg_abc"])
     assert code == 0
-    assert captured[-1] == "https://api.meteorxx.com"
+    assert captured[-1] == "https://meteorxx.com"
 
 
 def test_request_polls_until_approved(tmp_path, monkeypatch, capsys) -> None:
@@ -185,6 +186,32 @@ def test_config_http_ip_uses_plain_http(tmp_path, capsys) -> None:
     assert "api.192.168.0.107" not in out
 
 
+def test_old_api_subdomain_ip_connects_to_the_ip(tmp_path, monkeypatch) -> None:
+    config_dir = tmp_path / "meteorcli"
+    captured: list[str] = []
+    client = FakeClient()
+
+    def fake_client(server_url: str, **_: object) -> FakeClient:
+        captured.append(server_url)
+        return client
+
+    monkeypatch.setattr(meteorcli, "EdgeClient", fake_client)
+    meteorcli.main(
+        [
+            "--config-dir",
+            str(config_dir),
+            "config",
+            "--api-base",
+            "https://api.192.168.0.107:8000",
+            "--api-key",
+            "key_secret",
+        ]
+    )
+    code = meteorcli.main(["--config-dir", str(config_dir), "test"])
+    assert code == 0
+    assert captured[-1] == "http://192.168.0.107:8000"
+
+
 def test_test_http_flag_rewrites_https_ip(tmp_path, monkeypatch, capsys) -> None:
     config_dir = tmp_path / "meteorcli"
     captured: list[str] = []
@@ -233,7 +260,7 @@ def test_connection_success(tmp_path, monkeypatch, capsys) -> None:
     code = meteorcli.main(["--config-dir", str(config_dir), "test"])
     assert code == 0
     out = capsys.readouterr().out
-    assert "https://api.meteorxx.com" in out
+    assert "https://meteorxx.com" in out
     assert "Server:         ok" in out
     assert "API key:        ok" in out
     assert "Acme Energy" in out

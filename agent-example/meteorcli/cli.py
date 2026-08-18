@@ -399,7 +399,7 @@ def build_parser() -> argparse.ArgumentParser:
         epilog=(
             "Examples:\n"
             f"  {PROG} config --domain meteorxx.com --api-key key_XXXX\n"
-            f"  {PROG} config --domain 192.168.0.107:8000 --api-key key_XXXX --http\n"
+            f"  {PROG} config --domain 192.168.0.107:8000 --api-key key_XXXX\n"
             f"  {PROG} test\n"
             f"  {PROG} request --name edge-01\n"
             f"  {PROG} register --token reg_XXXX\n"
@@ -407,7 +407,7 @@ def build_parser() -> argparse.ArgumentParser:
             f"  {PROG} status\n"
             "\n"
             "Environment variables:\n"
-            f"  {ENV_DOMAIN}       Public domain (API is https://api.<domain>).\n"
+            f"  {ENV_DOMAIN}       Server host or IP (used as-is; HTTP for IPs).\n"
             f"  {ENV_SERVER}       Override the API base URL (http:// is allowed).\n"
             f"  {ENV_API_KEY}      API key.\n"
             f"  {ENV_TOKEN}        Registration token (used if --token is omitted).\n"
@@ -433,7 +433,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--domain",
         default=None,
         metavar="HOST",
-        help=f"Public domain such as meteorxx.com (or set {ENV_DOMAIN}).",
+        help=f"Server host or IP (meteorxx.com or 192.168.0.107:8000; or set {ENV_DOMAIN}).",
     )
     config_parser.add_argument(
         "--api-base",

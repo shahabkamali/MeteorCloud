@@ -31,7 +31,6 @@ infrastructure/
     │   ├── docker/
     │   ├── platform_*/
     │   └── vpn/
-    └── templates/
 ```
 
 ## Services

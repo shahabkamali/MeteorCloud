@@ -1,7 +1,7 @@
 ---
 - name: Render platform environment file
   ansible.builtin.template:
-    src: "{{ playbook_dir }}/../templates/platform.env.j2"
+    src: platform.env.j2
     dest: /opt/edge-platform/config/platform.env
     owner: root
     group: root
@@ -9,7 +9,7 @@
 
 - name: Render production Docker Compose file
   ansible.builtin.template:
-    src: "{{ playbook_dir }}/../templates/docker-compose.production.yml.j2"
+    src: docker-compose.production.yml.j2
     dest: /opt/edge-platform/docker-compose.yml
     owner: root
     group: root
@@ -17,7 +17,7 @@
 
 - name: Render Traefik static configuration
   ansible.builtin.template:
-    src: "{{ playbook_dir }}/../templates/traefik/traefik.yml.j2"
+    src: traefik/traefik.yml.j2
     dest: /opt/edge-platform/traefik/traefik.yml
     owner: root
     group: root
@@ -25,7 +25,7 @@
 
 - name: Render Traefik dynamic configuration
   ansible.builtin.template:
-    src: "{{ playbook_dir }}/../templates/traefik/dynamic.yml.j2"
+    src: traefik/dynamic.yml.j2
     dest: /opt/edge-platform/traefik/dynamic.yml
     owner: root
     group: root

@@ -32,9 +32,9 @@ Idempotent playbooks for provisioning and deploying modular services on the EC2 
 
 ## Templates
 
-- `templates/platform.env.j2`
-- `templates/docker-compose.production.yml.j2`
-- `templates/traefik/`
+- `roles/platform_config/templates/platform.env.j2`
+- `roles/platform_config/templates/docker-compose.production.yml.j2`
+- `roles/platform_config/templates/traefik/`
 - `roles/vpn/templates/wg0.conf.j2`
 
 ## Configuration

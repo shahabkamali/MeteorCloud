@@ -80,7 +80,11 @@ class PlatformDeploymentService:
                 )
                 health = report.as_dict()
             else:
-                logger.info("[%s/%s] Skipping cloud app health (cloud_app disabled)", stage, total_stages)
+                logger.info(
+                    "[%s/%s] Skipping cloud app health (cloud_app disabled)",
+                    stage,
+                    total_stages,
+                )
 
             url = platform_url(self.config, outputs) if "cloud_app" in enabled else None
             state = self._save_state(outputs, url, health, enabled)

@@ -34,12 +34,12 @@ from app.modules.fleet.schemas import (
     AgentEnrollRequest,
     AgentEnrollResponse,
 )
-from app.modules.organizations.models import Organization
 from app.modules.fleet.tokens import (
     generate_claim_secret,
     generate_device_token,
     hash_token,
 )
+from app.modules.organizations.models import Organization
 
 
 class EnrollmentService:

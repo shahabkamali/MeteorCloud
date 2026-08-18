@@ -51,8 +51,8 @@ def test_init_creates_sample_config(tmp_path: Path) -> None:
     assert "Created sample configuration" in result.stdout
 
 
-@patch("edge_installer.config.validation.validate_aws_credentials", return_value=[])
-@patch("edge_installer.config.validation.validate_dependencies", return_value=[])
+@patch("edge_installer.cli.commands.validate_aws_credentials", return_value=[])
+@patch("edge_installer.cli.commands.validate_dependencies", return_value=[])
 def test_validate_succeeds(
     _deps: MagicMock,
     _aws: MagicMock,
@@ -60,7 +60,7 @@ def test_validate_succeeds(
 ) -> None:
     result = runner.invoke(app, ["validate", "--config", str(config_path)])
 
-    assert result.exit_code == 0
+    assert result.exit_code == 0, result.stdout
     assert "Configuration is valid" in result.stdout
 
 
@@ -69,8 +69,8 @@ def test_validate_fails_for_missing_secrets(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.delenv("EDGE_PLATFORM_JWT_SECRET", raising=False)
-    with patch("edge_installer.config.validation.validate_dependencies", return_value=[]):
-        with patch("edge_installer.config.validation.validate_aws_credentials", return_value=[]):
+    with patch("edge_installer.cli.commands.validate_dependencies", return_value=[]):
+        with patch("edge_installer.cli.commands.validate_aws_credentials", return_value=[]):
             result = runner.invoke(app, ["validate", "--config", str(config_path)])
 
     assert result.exit_code == 1

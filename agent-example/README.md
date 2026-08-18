@@ -54,7 +54,9 @@ Environment variables: `METEORCLI_DOMAIN`, `METEORCLI_SERVER`, `METEORCLI_API_KE
 `METEORCLI_TOKEN`, `METEORCLI_CONFIG_DIR` (default: `/etc/meteorcli`).
 
 Given a domain such as `meteorxx.com`, the CLI calls `https://api.meteorxx.com`
-unless `--api-base` / `METEORCLI_SERVER` overrides it.
+unless `--api-base` / `METEORCLI_SERVER` overrides it. IP addresses and
+`localhost` use HTTP on the host itself (`http://192.168.0.107:8000`), not
+`api.<ip>`. Pass `--http` to force HTTP for a real domain.
 
 ## Configure the CLI
 
@@ -62,6 +64,14 @@ unless `--api-base` / `METEORCLI_SERVER` overrides it.
 sudo meteorcli config --domain meteorxx.com --api-key key_...
 sudo meteorcli test
 meteorcli config --show
+```
+
+Local / HTTP testing:
+
+```bash
+sudo meteorcli config --domain 192.168.0.107:8000 --api-key key_...
+sudo meteorcli test
+# or: sudo meteorcli config --api-base http://192.168.0.107:8000 --api-key key_...
 ```
 
 The API key is stored at `/etc/meteorcli/api-key` with `0600` permissions and is

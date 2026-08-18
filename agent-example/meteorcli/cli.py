@@ -33,6 +33,7 @@ from meteorcli import __version__
 from meteorcli.config import (
     DEFAULT_CONFIG_DIR,
     CliPaths,
+    derive_api_base,
     persist_connection,
     resolve_server_url,
 )
@@ -112,7 +113,7 @@ def _cmd_config(args: argparse.Namespace) -> int:
         )
         return 2
 
-    persist_connection(paths, domain=domain, api_base=api_base)
+    persist_connection(paths, domain=domain, api_base=api_base, http=args.http)
     if api_key:
         write_secret(paths.api_key_path, api_key)
     print(f"Configuration saved under {paths.config_path.parent}")
@@ -279,6 +280,9 @@ def _cmd_test(args: argparse.Namespace) -> int:
         )
         return 2
 
+    if args.http:
+        server = derive_api_base(server, http=True)
+
     client = EdgeClient(server)
     try:
         health = client.health()
@@ -395,6 +399,7 @@ def build_parser() -> argparse.ArgumentParser:
         epilog=(
             "Examples:\n"
             f"  {PROG} config --domain meteorxx.com --api-key key_XXXX\n"
+            f"  {PROG} config --domain 192.168.0.107:8000 --api-key key_XXXX --http\n"
             f"  {PROG} test\n"
             f"  {PROG} request --name edge-01\n"
             f"  {PROG} register --token reg_XXXX\n"
@@ -403,7 +408,7 @@ def build_parser() -> argparse.ArgumentParser:
             "\n"
             "Environment variables:\n"
             f"  {ENV_DOMAIN}       Public domain (API is https://api.<domain>).\n"
-            f"  {ENV_SERVER}       Override the API base URL.\n"
+            f"  {ENV_SERVER}       Override the API base URL (http:// is allowed).\n"
             f"  {ENV_API_KEY}      API key.\n"
             f"  {ENV_TOKEN}        Registration token (used if --token is omitted).\n"
             f"  {ENV_CONFIG_DIR}   Config/credential directory (default: /etc/meteorcli).\n"
@@ -434,7 +439,12 @@ def build_parser() -> argparse.ArgumentParser:
         "--api-base",
         default=None,
         metavar="URL",
-        help="Override the derived API origin (default: https://api.<domain>).",
+        help="Override the derived API origin (http:// is allowed for local testing).",
+    )
+    config_parser.add_argument(
+        "--http",
+        action="store_true",
+        help="Use HTTP instead of HTTPS (for local testing).",
     )
     config_parser.add_argument(
         "--api-key",
@@ -468,6 +478,11 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         metavar="KEY",
         help=f"API key (or set {ENV_API_KEY} / stored key).",
+    )
+    test_parser.add_argument(
+        "--http",
+        action="store_true",
+        help="Force HTTP when probing the server (for local testing).",
     )
     test_parser.set_defaults(func=_cmd_test)
 

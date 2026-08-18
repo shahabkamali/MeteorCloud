@@ -14,6 +14,13 @@ def test_derive_api_base() -> None:
     assert derive_api_base("meteorxx.com") == "https://api.meteorxx.com"
     assert derive_api_base("https://www.meteorxx.com") == "https://api.meteorxx.com"
     assert derive_api_base("api.meteorxx.com") == "https://api.meteorxx.com"
+    assert derive_api_base("meteorxx.com", http=True) == "http://api.meteorxx.com"
+    assert derive_api_base("http://meteorxx.com") == "http://api.meteorxx.com"
+    assert derive_api_base("192.168.0.107") == "http://192.168.0.107"
+    assert derive_api_base("192.168.0.107:8000") == "http://192.168.0.107:8000"
+    assert derive_api_base("http://192.168.0.107:8000") == "http://192.168.0.107:8000"
+    assert derive_api_base("https://api.192.168.0.107", http=True) == "http://192.168.0.107"
+    assert derive_api_base("localhost:8000") == "http://localhost:8000"
 
 
 def test_config_and_show(tmp_path, capsys) -> None:
@@ -157,7 +164,51 @@ def test_request_rejected(tmp_path, monkeypatch, capsys) -> None:
     assert "Unknown hardware" in capsys.readouterr().err
 
 
-def test_status_without_registration(tmp_path, capsys) -> None:
+def test_config_http_ip_uses_plain_http(tmp_path, capsys) -> None:
+    config_dir = tmp_path / "meteorcli"
+    code = meteorcli.main(
+        [
+            "--config-dir",
+            str(config_dir),
+            "config",
+            "--domain",
+            "192.168.0.107:8000",
+            "--api-key",
+            "key_secret",
+        ]
+    )
+    assert code == 0
+    code = meteorcli.main(["--config-dir", str(config_dir), "config", "--show"])
+    assert code == 0
+    out = capsys.readouterr().out
+    assert "http://192.168.0.107:8000" in out
+    assert "api.192.168.0.107" not in out
+
+
+def test_test_http_flag_rewrites_https_ip(tmp_path, monkeypatch, capsys) -> None:
+    config_dir = tmp_path / "meteorcli"
+    captured: list[str] = []
+    client = FakeClient()
+
+    def fake_client(server_url: str, **_: object) -> FakeClient:
+        captured.append(server_url)
+        return client
+
+    monkeypatch.setattr(meteorcli, "EdgeClient", fake_client)
+    meteorcli.main(
+        [
+            "--config-dir",
+            str(config_dir),
+            "config",
+            "--api-base",
+            "https://api.192.168.0.107:8000",
+            "--api-key",
+            "key_secret",
+        ]
+    )
+    code = meteorcli.main(["--config-dir", str(config_dir), "test", "--http"])
+    assert code == 0
+    assert captured[-1] == "http://192.168.0.107:8000"
     code = meteorcli.main(["--config-dir", str(tmp_path / "empty"), "status"])
     assert code == 1
     assert "Not configured" in capsys.readouterr().out

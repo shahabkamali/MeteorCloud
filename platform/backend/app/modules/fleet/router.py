@@ -10,6 +10,7 @@ from fastapi import APIRouter, Query
 from app.modules.fleet.dependencies import FleetSvc
 from app.modules.fleet.schemas import (
     DeviceCredentialResponse,
+    DeviceEnrollmentRequestResponse,
     DeviceGroupCreateRequest,
     DeviceGroupResponse,
     DeviceGroupUpdateRequest,
@@ -18,6 +19,11 @@ from app.modules.fleet.schemas import (
     DeviceTypeResponse,
     DeviceTypeUpdateRequest,
     DeviceUpdateRequest,
+    EnrollmentApiKeyCreateRequest,
+    EnrollmentApiKeyCreateResponse,
+    EnrollmentApiKeyResponse,
+    EnrollmentApproveRequest,
+    EnrollmentRejectRequest,
     Page,
     RegistrationTokenCreateRequest,
     RegistrationTokenCreateResponse,
@@ -85,9 +91,7 @@ def delete_device_type(
     current_user: CurrentUser,
     service: FleetSvc,
 ) -> None:
-    service.delete_device_type(
-        actor=current_user, organization_id=organization_id, type_id=type_id
-    )
+    service.delete_device_type(actor=current_user, organization_id=organization_id, type_id=type_id)
 
 
 # ----------------------------------------------------------------- device groups
@@ -159,9 +163,7 @@ def list_registration_tokens(
     current_user: CurrentUser,
     service: FleetSvc,
 ) -> list[RegistrationTokenResponse]:
-    return service.list_registration_tokens(
-        actor=current_user, organization_id=organization_id
-    )
+    return service.list_registration_tokens(actor=current_user, organization_id=organization_id)
 
 
 @router.post(
@@ -195,6 +197,104 @@ def revoke_registration_token(
     )
 
 
+# ------------------------------------------------------------ enrollment api keys
+@router.get("/enrollment-keys", response_model=list[EnrollmentApiKeyResponse])
+def list_enrollment_keys(
+    organization_id: uuid.UUID,
+    current_user: CurrentUser,
+    service: FleetSvc,
+) -> list[EnrollmentApiKeyResponse]:
+    return service.list_enrollment_keys(actor=current_user, organization_id=organization_id)
+
+
+@router.post(
+    "/enrollment-keys",
+    response_model=EnrollmentApiKeyCreateResponse,
+    status_code=201,
+)
+def create_enrollment_key(
+    organization_id: uuid.UUID,
+    payload: EnrollmentApiKeyCreateRequest,
+    current_user: CurrentUser,
+    service: FleetSvc,
+) -> EnrollmentApiKeyCreateResponse:
+    return service.create_enrollment_key(
+        actor=current_user, organization_id=organization_id, payload=payload
+    )
+
+
+@router.post(
+    "/enrollment-keys/{key_id}/revoke",
+    response_model=EnrollmentApiKeyResponse,
+)
+def revoke_enrollment_key(
+    organization_id: uuid.UUID,
+    key_id: uuid.UUID,
+    current_user: CurrentUser,
+    service: FleetSvc,
+) -> EnrollmentApiKeyResponse:
+    return service.revoke_enrollment_key(
+        actor=current_user, organization_id=organization_id, key_id=key_id
+    )
+
+
+# ------------------------------------------------------- enrollment requests
+@router.get(
+    "/enrollment-requests",
+    response_model=list[DeviceEnrollmentRequestResponse],
+)
+def list_enrollment_requests(
+    organization_id: uuid.UUID,
+    current_user: CurrentUser,
+    service: FleetSvc,
+    status: Annotated[
+        str | None,
+        Query(pattern="^(pending|approved|rejected|expired)$"),
+    ] = None,
+) -> list[DeviceEnrollmentRequestResponse]:
+    return service.list_enrollment_requests(
+        actor=current_user, organization_id=organization_id, status=status
+    )
+
+
+@router.post(
+    "/enrollment-requests/{request_id}/approve",
+    response_model=DeviceEnrollmentRequestResponse,
+)
+def approve_enrollment_request(
+    organization_id: uuid.UUID,
+    request_id: uuid.UUID,
+    payload: EnrollmentApproveRequest,
+    current_user: CurrentUser,
+    service: FleetSvc,
+) -> DeviceEnrollmentRequestResponse:
+    return service.approve_enrollment_request(
+        actor=current_user,
+        organization_id=organization_id,
+        request_id=request_id,
+        payload=payload,
+    )
+
+
+@router.post(
+    "/enrollment-requests/{request_id}/reject",
+    response_model=DeviceEnrollmentRequestResponse,
+)
+def reject_enrollment_request(
+    organization_id: uuid.UUID,
+    request_id: uuid.UUID,
+    payload: EnrollmentRejectRequest,
+    current_user: CurrentUser,
+    service: FleetSvc,
+) -> DeviceEnrollmentRequestResponse:
+    return service.reject_enrollment_request(
+        actor=current_user,
+        organization_id=organization_id,
+        request_id=request_id,
+        payload=payload,
+    )
+
+
 # ----------------------------------------------------------------------- devices
 @router.get("/devices", response_model=Page[DeviceResponse])
 def list_devices(
@@ -207,9 +307,7 @@ def list_devices(
     architecture: Annotated[str | None, Query()] = None,
     enabled: Annotated[bool | None, Query()] = None,
     status: Annotated[str | None, Query(pattern="^(online|offline|never_seen)$")] = None,
-    sort: Annotated[
-        str, Query(pattern="^(name|last_seen_at|created_at|registered_at)$")
-    ] = "name",
+    sort: Annotated[str, Query(pattern="^(name|last_seen_at|created_at|registered_at)$")] = "name",
     order: Annotated[str, Query(pattern="^(asc|desc)$")] = "asc",
     page: Annotated[int, Query(ge=1)] = 1,
     page_size: Annotated[int, Query(ge=1, le=100)] = 20,

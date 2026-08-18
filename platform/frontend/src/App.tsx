@@ -11,6 +11,7 @@ import { DeviceDetailPage } from "@/pages/fleet/DeviceDetailPage";
 import { DeviceGroupsPage } from "@/pages/fleet/DeviceGroupsPage";
 import { DevicesPage } from "@/pages/fleet/DevicesPage";
 import { DeviceTypesPage } from "@/pages/fleet/DeviceTypesPage";
+import { ApiKeysPage } from "@/pages/fleet/ApiKeysPage";
 import { OrganizationCreatePage } from "@/pages/organizations/OrganizationCreatePage";
 import { OrganizationListPage } from "@/pages/organizations/OrganizationListPage";
 import { OrganizationMembersPage } from "@/pages/organizations/OrganizationMembersPage";
@@ -99,6 +100,18 @@ export function App() {
               <DeviceGroupsPage />
             </ProtectedRoute>
           }
+        />
+        <Route
+          path="organizations/:organizationId/api-keys"
+          element={
+            <ProtectedRoute>
+              <ApiKeysPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="organizations/:organizationId/enrollment"
+          element={<Navigate to="../api-keys" replace />}
         />
         <Route
           path="organizations/:organizationId/registration-tokens"

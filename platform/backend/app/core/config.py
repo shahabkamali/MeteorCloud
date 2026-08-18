@@ -66,6 +66,34 @@ class Settings(BaseSettings):
         default=60,
         alias="REGISTRATION_RATE_LIMIT_WINDOW_SECONDS",
     )
+
+    # Device-initiated enrollment (request -> approve -> claim).
+    enrollment_request_rate_limit_requests: int = Field(
+        default=5,
+        alias="ENROLLMENT_REQUEST_RATE_LIMIT_REQUESTS",
+    )
+    enrollment_request_rate_limit_window_seconds: int = Field(
+        default=60,
+        alias="ENROLLMENT_REQUEST_RATE_LIMIT_WINDOW_SECONDS",
+    )
+    enrollment_poll_rate_limit_requests: int = Field(
+        default=30,
+        alias="ENROLLMENT_POLL_RATE_LIMIT_REQUESTS",
+    )
+    enrollment_poll_rate_limit_window_seconds: int = Field(
+        default=60,
+        alias="ENROLLMENT_POLL_RATE_LIMIT_WINDOW_SECONDS",
+    )
+    # Interval the device should wait between poll attempts (returned to the CLI).
+    enrollment_poll_interval_seconds: int = Field(
+        default=10,
+        alias="ENROLLMENT_POLL_INTERVAL_SECONDS",
+    )
+    # How long a pending enrollment request stays valid before it expires.
+    enrollment_request_ttl_seconds: int = Field(
+        default=3600,
+        alias="ENROLLMENT_REQUEST_TTL_SECONDS",
+    )
     # When True, agent registration over plain HTTP is rejected. Left False for
     # now (Milestone 4) but available so HTTPS can be enforced later.
     registration_require_https: bool = Field(

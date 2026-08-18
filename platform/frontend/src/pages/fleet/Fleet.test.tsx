@@ -102,6 +102,8 @@ beforeEach(() => {
   vi.mocked(fleetApi.listDeviceTypes).mockResolvedValue([]);
   vi.mocked(fleetApi.listDeviceGroups).mockResolvedValue([]);
   vi.mocked(fleetApi.listRegistrationTokens).mockResolvedValue([]);
+  vi.mocked(fleetApi.listEnrollmentKeys).mockResolvedValue([]);
+  vi.mocked(fleetApi.listEnrollmentRequests).mockResolvedValue([]);
   vi.mocked(fleetApi.listDevices).mockResolvedValue({
     items: [],
     total: 0,
@@ -257,5 +259,125 @@ describe("Device detail", () => {
 
     const dialog = await screen.findByRole("dialog");
     expect(within(dialog).getByText("dev_new-secret")).toBeInTheDocument();
+  });
+});
+
+describe("API keys", () => {
+  it("creates an API key and shows the plaintext once", async () => {
+    const user = userEvent.setup();
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", {
+      value: { writeText },
+      configurable: true,
+    });
+
+    vi.mocked(fleetApi.createEnrollmentKey).mockResolvedValue({
+      id: "key-1",
+      organization_id: "org-1",
+      name: "Field techs",
+      key_prefix: "key_abcdef01",
+      device_type_id: null,
+      device_group_id: null,
+      expires_at: null,
+      revoked_at: null,
+      last_used_at: null,
+      created_by_user_id: "user-1",
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      api_key: "key_super-secret-value",
+    });
+
+    renderApp(["/organizations/org-1/api-keys"]);
+    await user.type(await screen.findByLabelText(/^name$/i), "Field techs");
+    await user.click(screen.getByRole("button", { name: /create api key/i }));
+
+    await waitFor(() => {
+      expect(fleetApi.createEnrollmentKey).toHaveBeenCalledWith("token-123", "org-1", {
+        name: "Field techs",
+        device_type_id: undefined,
+        device_group_id: undefined,
+      });
+    });
+
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getByText("key_super-secret-value")).toBeInTheDocument();
+  });
+
+  it("approves a pending enrollment request", async () => {
+    const user = userEvent.setup();
+    vi.mocked(fleetApi.listEnrollmentRequests).mockResolvedValue([
+      {
+        id: "req-1",
+        organization_id: "org-1",
+        status: "pending",
+        claim_secret_prefix: "clm_abcdef",
+        requested_name: "edge-warehouse",
+        assigned_name: null,
+        device_type_id: null,
+        device_group_id: null,
+        machine_id: "machine-xyz",
+        serial_number: null,
+        mac_addresses: [],
+        hostname: "edge-warehouse",
+        os_name: "Ubuntu",
+        os_version: null,
+        kernel_version: null,
+        architecture: "x86_64",
+        cpu_model: null,
+        cpu_cores: null,
+        memory_mb: null,
+        reviewed_by_user_id: null,
+        reviewed_at: null,
+        rejection_reason: null,
+        claimed_at: null,
+        device_id: null,
+        expires_at: null,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      },
+    ]);
+    vi.mocked(fleetApi.approveEnrollmentRequest).mockResolvedValue({
+      id: "req-1",
+      organization_id: "org-1",
+      status: "approved",
+      claim_secret_prefix: "clm_abcdef",
+      requested_name: "edge-warehouse",
+      assigned_name: "edge-warehouse",
+      device_type_id: null,
+      device_group_id: null,
+      machine_id: "machine-xyz",
+      serial_number: null,
+      mac_addresses: [],
+      hostname: "edge-warehouse",
+      os_name: "Ubuntu",
+      os_version: null,
+      kernel_version: null,
+      architecture: "x86_64",
+      cpu_model: null,
+      cpu_cores: null,
+      memory_mb: null,
+      reviewed_by_user_id: "user-1",
+      reviewed_at: new Date().toISOString(),
+      rejection_reason: null,
+      claimed_at: null,
+      device_id: null,
+      expires_at: null,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    });
+
+    renderApp(["/organizations/org-1/api-keys"]);
+    expect(await screen.findByRole("button", { name: /^approve$/i })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /^approve$/i }));
+    await user.click(screen.getByRole("button", { name: /confirm approval/i }));
+
+    await waitFor(() => {
+      expect(fleetApi.approveEnrollmentRequest).toHaveBeenCalledWith(
+        "token-123",
+        "org-1",
+        "req-1",
+        expect.objectContaining({ name: "edge-warehouse" }),
+      );
+    });
   });
 });

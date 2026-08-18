@@ -79,11 +79,14 @@ registration. Always use HTTPS in production.
 ## Using the reference agent
 
 ```bash
-printf '%s' "reg_..." > /etc/edge-agent/registration-token
-sudo edge-agent register \
+printf '%s' "reg_..." > /run/meterocli.token
+sudo meterocli register \
   --server https://platform.example.com \
-  --token-file /etc/edge-agent/registration-token \
+  --token-file /run/meterocli.token \
   --name edge-01
 ```
+
+Devices can also [request enrollment](device-request-enrollment.md) without a
+token, using an organization API key and administrator approval.
 
 See [agent-example/README.md](../../agent-example/README.md).

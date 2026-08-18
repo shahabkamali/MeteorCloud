@@ -50,6 +50,24 @@ class EdgeClient:
         except urllib.error.URLError as exc:  # network-level failure
             raise AgentApiError(0, "network_error", str(exc.reason)) from exc
 
+    def enroll_request(
+        self,
+        *,
+        api_key: str,
+        inventory: dict[str, Any],
+        name: str | None,
+    ) -> dict[str, Any]:
+        body: dict[str, Any] = {**inventory}
+        if name:
+            body["name"] = name
+        return self._post("/api/v1/agent/enroll/request", body, bearer=api_key)
+
+    def enroll_poll(self, *, request_id: str, claim_secret: str) -> dict[str, Any]:
+        return self._post(
+            "/api/v1/agent/enroll/poll",
+            {"request_id": request_id, "claim_secret": claim_secret},
+        )
+
     @staticmethod
     def _to_api_error(exc: urllib.error.HTTPError) -> AgentApiError:
         code = "request_failed"

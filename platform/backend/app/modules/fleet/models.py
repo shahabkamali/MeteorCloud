@@ -229,3 +229,168 @@ class Device(Base, UUIDPrimaryKeyMixin, TimestampMixin):
         ForeignKey("registration_tokens.id", ondelete="SET NULL"),
         nullable=True,
     )
+
+
+class EnrollmentApiKey(Base, UUIDPrimaryKeyMixin, TimestampMixin):
+    """An organization-scoped API key used by the CLI to submit device-initiated
+    enrollment requests.
+
+    Only the SHA-256 lookup hash is stored. The plaintext value is returned once
+    at creation time and never persisted or logged.
+    """
+
+    __tablename__ = "enrollment_api_keys"
+    __table_args__ = (
+        UniqueConstraint("key_hash", name="uq_enrollment_api_keys_key_hash"),
+        Index("ix_enrollment_api_keys_organization_id", "organization_id"),
+    )
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("organizations.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    name: Mapped[str] = mapped_column(String(120), nullable=False)
+    key_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    key_prefix: Mapped[str] = mapped_column(String(32), nullable=False)
+
+    # Optional defaults applied to devices enrolled with this key.
+    device_type_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("device_types.id", ondelete="RESTRICT"),
+        nullable=True,
+    )
+    device_group_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("device_groups.id", ondelete="RESTRICT"),
+        nullable=True,
+    )
+
+    expires_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+    revoked_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+    last_used_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+    created_by_user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+
+
+class DeviceEnrollmentRequest(Base, UUIDPrimaryKeyMixin, TimestampMixin):
+    """A device-initiated enrollment request awaiting admin review.
+
+    On approval the device polls with its claim secret; the credential is issued
+    (and the device row created) only at claim time. Only the SHA-256 hash of the
+    claim secret is stored.
+    """
+
+    __tablename__ = "device_enrollment_requests"
+    __table_args__ = (
+        Index("ix_device_enrollment_requests_organization_id", "organization_id"),
+        Index(
+            "ix_device_enrollment_requests_org_status",
+            "organization_id",
+            "status",
+        ),
+    )
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("organizations.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    api_key_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("enrollment_api_keys.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+
+    status: Mapped[str] = mapped_column(
+        String(16),
+        nullable=False,
+        default="pending",
+        server_default="pending",
+    )
+
+    claim_secret_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    claim_secret_prefix: Mapped[str] = mapped_column(String(32), nullable=False)
+
+    # Name requested by the device; the admin may override it at approval.
+    requested_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    # Assigned by the admin at approval time.
+    assigned_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    device_type_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("device_types.id", ondelete="RESTRICT"),
+        nullable=True,
+    )
+    device_group_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("device_groups.id", ondelete="RESTRICT"),
+        nullable=True,
+    )
+
+    # Captured inventory (mirrors Device; all optional).
+    machine_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    serial_number: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    mac_addresses: Mapped[list[str]] = mapped_column(
+        JSONB,
+        nullable=False,
+        default=list,
+        server_default="[]",
+    )
+    hostname: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    os_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    os_version: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    kernel_version: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    architecture: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    cpu_model: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    cpu_cores: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    memory_mb: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    labels: Mapped[dict[str, Any]] = mapped_column(
+        JSONB,
+        nullable=False,
+        default=dict,
+        server_default="{}",
+    )
+    metadata_: Mapped[dict[str, Any]] = mapped_column(
+        "metadata",
+        JSONB,
+        nullable=False,
+        default=dict,
+        server_default="{}",
+    )
+
+    reviewed_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    reviewed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+    rejection_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    claimed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+    device_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("devices.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    expires_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )

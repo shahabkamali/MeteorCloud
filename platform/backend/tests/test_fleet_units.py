@@ -13,8 +13,12 @@ from app.modules.fleet.identity import (
 from app.modules.fleet.models import Device
 from app.modules.fleet.status import ConnectivityStatus, connectivity_status
 from app.modules.fleet.tokens import (
+    API_KEY_PREFIX,
+    CLAIM_SECRET_PREFIX,
     DEVICE_TOKEN_PREFIX,
     REGISTRATION_TOKEN_PREFIX,
+    generate_api_key,
+    generate_claim_secret,
     generate_device_token,
     generate_registration_token,
     hash_token,
@@ -33,6 +37,15 @@ def test_device_token_has_prefix() -> None:
     generated = generate_device_token()
     assert generated.plaintext.startswith(DEVICE_TOKEN_PREFIX)
     assert len(generated.token_hash) == 64
+
+
+def test_api_key_and_claim_secret_prefixes() -> None:
+    key = generate_api_key()
+    claim = generate_claim_secret()
+    assert key.plaintext.startswith(API_KEY_PREFIX)
+    assert claim.plaintext.startswith(CLAIM_SECRET_PREFIX)
+    assert key.token_hash == hash_token(key.plaintext)
+    assert claim.token_hash == hash_token(claim.plaintext)
 
 
 def test_tokens_are_unique() -> None:
@@ -92,9 +105,7 @@ def test_match_existing_device_ambiguous() -> None:
     d2 = Device(serial_number="s1")
     d2.organization_id = org
     d2.id = uuid.uuid4()
-    identity = DeviceIdentity(
-        machine_id="m1", serial_number="s1", mac_addresses=[]
-    )
+    identity = DeviceIdentity(machine_id="m1", serial_number="s1", mac_addresses=[])
     result = match_existing_device(identity, organization_id=org, candidates=[d1, d2])
     assert result.ambiguous is True
 
@@ -106,14 +117,10 @@ def test_connectivity_status() -> None:
         is ConnectivityStatus.NEVER_SEEN
     )
     assert (
-        connectivity_status(
-            now - timedelta(seconds=30), offline_threshold_seconds=150, now=now
-        )
+        connectivity_status(now - timedelta(seconds=30), offline_threshold_seconds=150, now=now)
         is ConnectivityStatus.ONLINE
     )
     assert (
-        connectivity_status(
-            now - timedelta(seconds=200), offline_threshold_seconds=150, now=now
-        )
+        connectivity_status(now - timedelta(seconds=200), offline_threshold_seconds=150, now=now)
         is ConnectivityStatus.OFFLINE
     )

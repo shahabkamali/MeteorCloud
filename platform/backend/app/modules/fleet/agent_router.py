@@ -9,11 +9,19 @@ from fastapi import APIRouter, Depends, Request
 
 from app.core.config import Settings, get_settings
 from app.modules.fleet.dependencies import (
+    CurrentApiKey,
     CurrentDevice,
+    EnrollmentSvc,
     RegistrationSvc,
+    enforce_enroll_poll_rate_limit,
+    enforce_enroll_request_rate_limit,
     enforce_registration_rate_limit,
 )
 from app.modules.fleet.schemas import (
+    AgentEnrollPollRequest,
+    AgentEnrollPollResponse,
+    AgentEnrollRequest,
+    AgentEnrollResponse,
     AgentHeartbeatRequest,
     AgentHeartbeatResponse,
     AgentRegisterRequest,
@@ -62,3 +70,49 @@ def device_heartbeat(
     service: RegistrationSvc,
 ) -> AgentHeartbeatResponse:
     return service.heartbeat(device=device, payload=payload)
+
+
+def _warn_insecure_transport(request: Request, settings: Settings) -> None:
+    if request.url.scheme == "https":
+        return
+    if settings.registration_require_https:
+        from app.core.exceptions import ForbiddenError
+
+        raise ForbiddenError(
+            "https_required",
+            "Device registration requires a secure (HTTPS) connection.",
+        )
+    logger.warning(
+        "Device enrollment received over insecure transport (%s). "
+        "Enable REGISTRATION_REQUIRE_HTTPS in production.",
+        request.url.scheme,
+    )
+
+
+@router.post(
+    "/enroll/request",
+    response_model=AgentEnrollResponse,
+    status_code=201,
+    dependencies=[Depends(enforce_enroll_request_rate_limit)],
+)
+def enroll_request(
+    payload: AgentEnrollRequest,
+    request: Request,
+    api_key: CurrentApiKey,
+    service: EnrollmentSvc,
+    settings: Annotated[Settings, Depends(get_settings)],
+) -> AgentEnrollResponse:
+    _warn_insecure_transport(request, settings)
+    return service.submit_request(api_key=api_key, payload=payload)
+
+
+@router.post(
+    "/enroll/poll",
+    response_model=AgentEnrollPollResponse,
+    dependencies=[Depends(enforce_enroll_poll_rate_limit)],
+)
+def enroll_poll(
+    payload: AgentEnrollPollRequest,
+    service: EnrollmentSvc,
+) -> AgentEnrollPollResponse:
+    return service.poll(payload)

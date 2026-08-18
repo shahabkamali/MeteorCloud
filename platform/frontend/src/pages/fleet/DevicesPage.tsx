@@ -7,6 +7,7 @@ import {
   listDeviceGroups,
   listDeviceTypes,
   listDevices,
+  listEnrollmentRequests,
   listRegistrationTokens,
   revokeRegistrationToken,
   type ConnectivityStatus,
@@ -28,7 +29,7 @@ const PAGE_SIZE = 10;
 
 function buildRegisterCommand(serverOrigin: string, token: string): string {
   return [
-    "sudo meteor register \\",
+    "sudo meterocli register \\",
     `  --server ${serverOrigin} \\`,
     `  --token ${token}`,
   ].join("\n");
@@ -74,6 +75,11 @@ export function DevicesPage() {
   const tokensQuery = useQuery({
     queryKey: ["registration-tokens", organizationId, token],
     queryFn: () => listRegistrationTokens(token!, organizationId),
+    enabled: Boolean(token && organizationId),
+  });
+  const enrollmentRequestsQuery = useQuery({
+    queryKey: ["enrollment-requests", organizationId, token],
+    queryFn: () => listEnrollmentRequests(token!, organizationId, "pending"),
     enabled: Boolean(token && organizationId),
   });
 
@@ -247,6 +253,18 @@ export function DevicesPage() {
       )}
 
       {formError && <p className="text-sm text-red-700">{formError}</p>}
+
+      {(enrollmentRequestsQuery.data ?? []).length > 0 && (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          <p>
+            {(enrollmentRequestsQuery.data ?? []).length} device(s) requested enrollment
+            and are waiting for review.
+          </p>
+          <Button variant="secondary" size="sm" asChild>
+            <Link to={`/organizations/${organizationId}/api-keys`}>Review requests</Link>
+          </Button>
+        </div>
+      )}
 
       {pendingTokens.length > 0 && (
         <div className="space-y-2">

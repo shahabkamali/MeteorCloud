@@ -19,13 +19,13 @@ dev = [
 ]
 
 [project.scripts]
-# `meteor` is the primary on-device command; `edge-agent` remains as an alias
+# `meterocli` is the primary on-device command; `edge-agent` remains as an alias
 # for the reference agent internals.
-meteor = "meteor.cli:main"
+meterocli = "meterocli.cli:main"
 edge-agent = "edge_agent.main:main"
 
 [tool.hatch.build.targets.wheel]
-packages = ["edge_agent", "meteor"]
+packages = ["edge_agent", "meterocli"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

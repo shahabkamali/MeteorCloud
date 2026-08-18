@@ -3,6 +3,7 @@ import {
   Boxes,
   Building2,
   Cpu,
+  KeyRound,
   Layers,
   LayoutDashboard,
   LogIn,
@@ -68,6 +69,10 @@ export function Sidebar() {
                 <NavLink to={`/organizations/${orgId}/devices`} className={linkClass}>
                   <Cpu className="h-4 w-4" />
                   Devices
+                </NavLink>
+                <NavLink to={`/organizations/${orgId}/api-keys`} className={linkClass}>
+                  <KeyRound className="h-4 w-4" />
+                  API keys
                 </NavLink>
               </div>
             )}

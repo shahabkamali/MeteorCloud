@@ -15,7 +15,14 @@ from datetime import datetime
 from sqlalchemy import Select, asc, desc, func, or_, select
 from sqlalchemy.orm import Session
 
-from app.modules.fleet.models import Device, DeviceGroup, DeviceType, RegistrationToken
+from app.modules.fleet.models import (
+    Device,
+    DeviceEnrollmentRequest,
+    DeviceGroup,
+    DeviceType,
+    EnrollmentApiKey,
+    RegistrationToken,
+)
 
 
 class DeviceTypeRepository:
@@ -135,9 +142,7 @@ class RegistrationTokenRepository:
 
     def get_by_hash(self, token_hash: str) -> RegistrationToken | None:
         """Resolve a token by its lookup hash across all organizations."""
-        statement = select(RegistrationToken).where(
-            RegistrationToken.token_hash == token_hash
-        )
+        statement = select(RegistrationToken).where(RegistrationToken.token_hash == token_hash)
         return self.session.scalar(statement)
 
     def list(self, *, organization_id: uuid.UUID) -> list[RegistrationToken]:
@@ -237,9 +242,7 @@ class DeviceRepository:
         if device_group_id is not None:
             statement = statement.where(Device.device_group_id == device_group_id)
         if architecture:
-            statement = statement.where(
-                func.lower(Device.architecture) == architecture.lower()
-            )
+            statement = statement.where(func.lower(Device.architecture) == architecture.lower())
         if enabled is not None:
             statement = statement.where(Device.is_enabled.is_(enabled))
         if status == "online" and online_cutoff is not None:
@@ -295,3 +298,81 @@ class DeviceRepository:
 
         devices = list(self.session.scalars(statement).all())
         return devices, total
+
+
+class EnrollmentApiKeyRepository:
+    def __init__(self, session: Session) -> None:
+        self.session = session
+
+    def get(self, *, organization_id: uuid.UUID, key_id: uuid.UUID) -> EnrollmentApiKey | None:
+        statement = select(EnrollmentApiKey).where(
+            EnrollmentApiKey.id == key_id,
+            EnrollmentApiKey.organization_id == organization_id,
+        )
+        return self.session.scalar(statement)
+
+    def get_by_hash(self, key_hash: str) -> EnrollmentApiKey | None:
+        """Resolve an API key by its lookup hash across all organizations."""
+        statement = select(EnrollmentApiKey).where(EnrollmentApiKey.key_hash == key_hash)
+        return self.session.scalar(statement)
+
+    def list(self, *, organization_id: uuid.UUID) -> list[EnrollmentApiKey]:
+        statement = (
+            select(EnrollmentApiKey)
+            .where(EnrollmentApiKey.organization_id == organization_id)
+            .order_by(EnrollmentApiKey.created_at.desc())
+        )
+        return list(self.session.scalars(statement).all())
+
+    def create(self, key: EnrollmentApiKey) -> EnrollmentApiKey:
+        self.session.add(key)
+        self.session.flush()
+        return key
+
+    def update(self, key: EnrollmentApiKey) -> EnrollmentApiKey:
+        self.session.add(key)
+        self.session.flush()
+        return key
+
+
+class DeviceEnrollmentRequestRepository:
+    def __init__(self, session: Session) -> None:
+        self.session = session
+
+    def get(
+        self, *, organization_id: uuid.UUID, request_id: uuid.UUID
+    ) -> DeviceEnrollmentRequest | None:
+        statement = select(DeviceEnrollmentRequest).where(
+            DeviceEnrollmentRequest.id == request_id,
+            DeviceEnrollmentRequest.organization_id == organization_id,
+        )
+        return self.session.scalar(statement)
+
+    def get_by_id(self, request_id: uuid.UUID) -> DeviceEnrollmentRequest | None:
+        """Resolve a request by id across organizations (device-facing poll)."""
+        statement = select(DeviceEnrollmentRequest).where(DeviceEnrollmentRequest.id == request_id)
+        return self.session.scalar(statement)
+
+    def list(
+        self,
+        *,
+        organization_id: uuid.UUID,
+        status: str | None = None,
+    ) -> list[DeviceEnrollmentRequest]:
+        statement = select(DeviceEnrollmentRequest).where(
+            DeviceEnrollmentRequest.organization_id == organization_id
+        )
+        if status is not None:
+            statement = statement.where(DeviceEnrollmentRequest.status == status)
+        statement = statement.order_by(DeviceEnrollmentRequest.created_at.desc())
+        return list(self.session.scalars(statement).all())
+
+    def create(self, request: DeviceEnrollmentRequest) -> DeviceEnrollmentRequest:
+        self.session.add(request)
+        self.session.flush()
+        return request
+
+    def update(self, request: DeviceEnrollmentRequest) -> DeviceEnrollmentRequest:
+        self.session.add(request)
+        self.session.flush()
+        return request

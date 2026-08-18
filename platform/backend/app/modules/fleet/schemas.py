@@ -289,3 +289,149 @@ class AgentHeartbeatResponse(BaseModel):
     status: ConnectivityStatus
     heartbeat_interval_seconds: int
     server_time: datetime
+
+
+# --------------------------------------------------------------------------- #
+# Enrollment API keys (admin)
+# --------------------------------------------------------------------------- #
+class EnrollmentApiKeyCreateRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
+    device_type_id: uuid.UUID | None = None
+    device_group_id: uuid.UUID | None = None
+    expires_at: datetime | None = None
+
+    @field_validator("name")
+    @classmethod
+    def _strip_name(cls, value: str) -> str:
+        cleaned = value.strip()
+        if not cleaned:
+            raise ValueError("Name must not be blank")
+        return cleaned
+
+
+class EnrollmentApiKeyResponse(BaseModel):
+    """API-key metadata. Never includes the plaintext secret."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    organization_id: uuid.UUID
+    name: str
+    key_prefix: str
+    device_type_id: uuid.UUID | None
+    device_group_id: uuid.UUID | None
+    expires_at: datetime | None
+    revoked_at: datetime | None
+    last_used_at: datetime | None
+    created_by_user_id: uuid.UUID
+    created_at: datetime
+    updated_at: datetime
+
+
+class EnrollmentApiKeyCreateResponse(EnrollmentApiKeyResponse):
+    """Returned only at creation time; includes the one-time plaintext key."""
+
+    api_key: str
+
+
+# --------------------------------------------------------------------------- #
+# Device enrollment requests (admin)
+# --------------------------------------------------------------------------- #
+EnrollmentStatus = Literal["pending", "approved", "rejected", "expired"]
+
+
+class DeviceEnrollmentRequestResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    organization_id: uuid.UUID
+    status: str
+    claim_secret_prefix: str
+    requested_name: str | None
+    assigned_name: str | None
+    device_type_id: uuid.UUID | None
+    device_group_id: uuid.UUID | None
+    machine_id: str | None
+    serial_number: str | None
+    mac_addresses: list[str]
+    hostname: str | None
+    os_name: str | None
+    os_version: str | None
+    kernel_version: str | None
+    architecture: str | None
+    cpu_model: str | None
+    cpu_cores: int | None
+    memory_mb: int | None
+    reviewed_by_user_id: uuid.UUID | None
+    reviewed_at: datetime | None
+    rejection_reason: str | None
+    claimed_at: datetime | None
+    device_id: uuid.UUID | None
+    expires_at: datetime | None
+    created_at: datetime
+    updated_at: datetime
+
+
+class EnrollmentApproveRequest(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=255)
+    device_type_id: uuid.UUID | None = None
+    device_group_id: uuid.UUID | None = None
+
+    @field_validator("name")
+    @classmethod
+    def _strip_name(cls, value: str | None) -> str | None:
+        return _strip_optional(value)
+
+
+class EnrollmentRejectRequest(BaseModel):
+    reason: str | None = Field(default=None, max_length=2000)
+
+    @field_validator("reason")
+    @classmethod
+    def _strip_reason(cls, value: str | None) -> str | None:
+        return _strip_optional(value)
+
+
+# --------------------------------------------------------------------------- #
+# Agent enrollment API (device-facing, API-key authenticated)
+# --------------------------------------------------------------------------- #
+class AgentEnrollRequest(BaseModel):
+    name: str | None = Field(default=None, max_length=255)
+    machine_id: str | None = Field(default=None, max_length=255)
+    serial_number: str | None = Field(default=None, max_length=255)
+    mac_addresses: list[str] = Field(default_factory=list)
+    hostname: str | None = Field(default=None, max_length=255)
+    os_name: str | None = Field(default=None, max_length=255)
+    os_version: str | None = Field(default=None, max_length=255)
+    kernel_version: str | None = Field(default=None, max_length=255)
+    architecture: str | None = Field(default=None, max_length=64)
+    cpu_model: str | None = Field(default=None, max_length=255)
+    cpu_cores: int | None = Field(default=None, ge=0)
+    memory_mb: int | None = Field(default=None, ge=0)
+    labels: dict[str, Any] = Field(default_factory=dict)
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class AgentEnrollResponse(BaseModel):
+    request_id: uuid.UUID
+    claim_secret: str
+    status: EnrollmentStatus
+    poll_interval_seconds: int
+    expires_at: datetime | None
+
+
+class AgentEnrollPollRequest(BaseModel):
+    request_id: uuid.UUID
+    claim_secret: str = Field(min_length=1)
+
+
+class AgentEnrollPollResponse(BaseModel):
+    status: EnrollmentStatus
+    poll_interval_seconds: int
+    # Present only once, when an approved request is first claimed.
+    device_id: uuid.UUID | None = None
+    device_token: str | None = None
+    organization_id: uuid.UUID | None = None
+    name: str | None = None
+    heartbeat_interval_seconds: int | None = None
+    rejection_reason: str | None = None

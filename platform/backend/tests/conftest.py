@@ -18,7 +18,11 @@ from app.main import create_app
 
 # Ensure metadata includes domain models.
 from app.modules.fleet import models as _fleet_models  # noqa: F401
-from app.modules.fleet.dependencies import get_rate_limiter
+from app.modules.fleet.dependencies import (
+    get_enroll_poll_rate_limiter,
+    get_enroll_request_rate_limiter,
+    get_rate_limiter,
+)
 from app.modules.fleet.rate_limit import InMemoryRateLimiter
 from app.modules.identity import models as _identity_models  # noqa: F401
 from app.modules.identity.models import User
@@ -66,6 +70,12 @@ def client(db_session: Session) -> Generator[TestClient]:
     # Permissive limiter by default; tests that exercise rate limiting override
     # this on ``client.app.dependency_overrides``.
     application.dependency_overrides[get_rate_limiter] = lambda: InMemoryRateLimiter(
+        limit=10_000, window_seconds=60
+    )
+    application.dependency_overrides[get_enroll_request_rate_limiter] = lambda: InMemoryRateLimiter(
+        limit=10_000, window_seconds=60
+    )
+    application.dependency_overrides[get_enroll_poll_rate_limiter] = lambda: InMemoryRateLimiter(
         limit=10_000, window_seconds=60
     )
     with TestClient(application) as test_client:

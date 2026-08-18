@@ -36,10 +36,30 @@ class AgentConfig:
     """Non-secret agent configuration persisted between runs."""
 
     server_url: str
-    device_id: str
-    organization_id: str
-    name: str
+    device_id: str = ""
+    organization_id: str = ""
+    name: str = ""
     heartbeat_interval_seconds: int = 60
+    domain: str | None = None
+    api_base: str | None = None
+
+
+def load_config(paths: AgentPaths) -> AgentConfig | None:
+    """Load persisted configuration, or None when it does not exist."""
+    try:
+        raw = paths.config_path.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        return None
+    data = json.loads(raw)
+    return AgentConfig(
+        server_url=data.get("server_url") or "",
+        device_id=data.get("device_id") or "",
+        organization_id=data.get("organization_id") or "",
+        name=data.get("name") or "",
+        heartbeat_interval_seconds=int(data.get("heartbeat_interval_seconds", 60)),
+        domain=data.get("domain"),
+        api_base=data.get("api_base"),
+    )
 
 
 def _atomic_write(path: Path, data: str, *, mode: int) -> None:
@@ -62,19 +82,3 @@ def _atomic_write(path: Path, data: str, *, mode: int) -> None:
 def save_config(paths: AgentPaths, config: AgentConfig) -> None:
     """Persist non-secret configuration as JSON (mode 0644)."""
     _atomic_write(paths.config_path, json.dumps(asdict(config), indent=2), mode=0o644)
-
-
-def load_config(paths: AgentPaths) -> AgentConfig | None:
-    """Load persisted configuration, or None when it does not exist."""
-    try:
-        raw = paths.config_path.read_text(encoding="utf-8")
-    except FileNotFoundError:
-        return None
-    data = json.loads(raw)
-    return AgentConfig(
-        server_url=data["server_url"],
-        device_id=data["device_id"],
-        organization_id=data["organization_id"],
-        name=data["name"],
-        heartbeat_interval_seconds=int(data.get("heartbeat_interval_seconds", 60)),
-    )

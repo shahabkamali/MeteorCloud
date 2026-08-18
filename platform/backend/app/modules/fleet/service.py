@@ -14,16 +14,26 @@ from sqlalchemy.orm import Session
 
 from app.core.config import Settings, get_settings
 from app.core.exceptions import ConflictError, ForbiddenError, NotFoundError
-from app.modules.fleet.models import Device, DeviceGroup, DeviceType, RegistrationToken
+from app.modules.fleet.models import (
+    Device,
+    DeviceEnrollmentRequest,
+    DeviceGroup,
+    DeviceType,
+    EnrollmentApiKey,
+    RegistrationToken,
+)
 from app.modules.fleet.permissions import can_manage_fleet
 from app.modules.fleet.repository import (
+    DeviceEnrollmentRequestRepository,
     DeviceGroupRepository,
     DeviceRepository,
     DeviceTypeRepository,
+    EnrollmentApiKeyRepository,
     RegistrationTokenRepository,
 )
 from app.modules.fleet.schemas import (
     DeviceCredentialResponse,
+    DeviceEnrollmentRequestResponse,
     DeviceGroupCreateRequest,
     DeviceGroupResponse,
     DeviceGroupUpdateRequest,
@@ -32,13 +42,22 @@ from app.modules.fleet.schemas import (
     DeviceTypeResponse,
     DeviceTypeUpdateRequest,
     DeviceUpdateRequest,
+    EnrollmentApiKeyCreateRequest,
+    EnrollmentApiKeyCreateResponse,
+    EnrollmentApiKeyResponse,
+    EnrollmentApproveRequest,
+    EnrollmentRejectRequest,
     Page,
     RegistrationTokenCreateRequest,
     RegistrationTokenCreateResponse,
     RegistrationTokenResponse,
 )
 from app.modules.fleet.status import connectivity_status, offline_cutoff
-from app.modules.fleet.tokens import generate_device_token, generate_registration_token
+from app.modules.fleet.tokens import (
+    generate_api_key,
+    generate_device_token,
+    generate_registration_token,
+)
 from app.modules.identity.models import User
 from app.modules.organizations.models import OrganizationMembership, OrganizationRole
 from app.modules.organizations.repository import OrganizationRepository
@@ -53,6 +72,8 @@ class FleetService:
         self.device_groups = DeviceGroupRepository(session)
         self.tokens = RegistrationTokenRepository(session)
         self.devices = DeviceRepository(session)
+        self.api_keys = EnrollmentApiKeyRepository(session)
+        self.enrollment_requests = DeviceEnrollmentRequestRepository(session)
 
     # ---------------------------------------------------------------- helpers
     def _require_membership(
@@ -108,9 +129,7 @@ class FleetService:
     ) -> DeviceTypeResponse:
         membership = self._require_membership(organization_id, actor.id)
         self._require_manage(membership.role)
-        if self.device_types.get_by_name(
-            organization_id=organization_id, name=payload.name
-        ):
+        if self.device_types.get_by_name(organization_id=organization_id, name=payload.name):
             raise ConflictError(
                 "device_type_exists",
                 "A device type with this name already exists.",
@@ -169,9 +188,7 @@ class FleetService:
         membership = self._require_membership(organization_id, actor.id)
         self._require_manage(membership.role)
         device_type = self._require_device_type(organization_id, type_id)
-        if self.device_types.count_devices(
-            organization_id=organization_id, type_id=type_id
-        ):
+        if self.device_types.count_devices(organization_id=organization_id, type_id=type_id):
             raise ConflictError(
                 "device_type_in_use",
                 "This device type is still assigned to devices.",
@@ -179,12 +196,8 @@ class FleetService:
         self.device_types.delete(device_type)
         self.session.commit()
 
-    def _require_device_type(
-        self, organization_id: uuid.UUID, type_id: uuid.UUID
-    ) -> DeviceType:
-        device_type = self.device_types.get(
-            organization_id=organization_id, type_id=type_id
-        )
+    def _require_device_type(self, organization_id: uuid.UUID, type_id: uuid.UUID) -> DeviceType:
+        device_type = self.device_types.get(organization_id=organization_id, type_id=type_id)
         if device_type is None:
             raise NotFoundError("device_type_not_found", "Device type was not found.")
         return device_type
@@ -222,9 +235,7 @@ class FleetService:
     ) -> DeviceGroupResponse:
         membership = self._require_membership(organization_id, actor.id)
         self._require_manage(membership.role)
-        if self.device_groups.get_by_name(
-            organization_id=organization_id, name=payload.name
-        ):
+        if self.device_groups.get_by_name(organization_id=organization_id, name=payload.name):
             raise ConflictError(
                 "device_group_exists",
                 "A device group with this name already exists.",
@@ -283,9 +294,7 @@ class FleetService:
         membership = self._require_membership(organization_id, actor.id)
         self._require_manage(membership.role)
         group = self._require_device_group(organization_id, group_id)
-        if self.device_groups.count_devices(
-            organization_id=organization_id, group_id=group_id
-        ):
+        if self.device_groups.count_devices(organization_id=organization_id, group_id=group_id):
             raise ConflictError(
                 "device_group_in_use",
                 "This device group is still assigned to devices.",
@@ -293,12 +302,8 @@ class FleetService:
         self.device_groups.delete(group)
         self.session.commit()
 
-    def _require_device_group(
-        self, organization_id: uuid.UUID, group_id: uuid.UUID
-    ) -> DeviceGroup:
-        group = self.device_groups.get(
-            organization_id=organization_id, group_id=group_id
-        )
+    def _require_device_group(self, organization_id: uuid.UUID, group_id: uuid.UUID) -> DeviceGroup:
+        group = self.device_groups.get(organization_id=organization_id, group_id=group_id)
         if group is None:
             raise NotFoundError("device_group_not_found", "Device group was not found.")
         return group
@@ -379,6 +384,166 @@ class FleetService:
             self.session.commit()
             self.session.refresh(token)
         return RegistrationTokenResponse.model_validate(token)
+
+    # ------------------------------------------------------- enrollment api keys
+    def list_enrollment_keys(
+        self,
+        *,
+        actor: User,
+        organization_id: uuid.UUID,
+    ) -> list[EnrollmentApiKeyResponse]:
+        self._require_membership(organization_id, actor.id)
+        return [
+            EnrollmentApiKeyResponse.model_validate(item)
+            for item in self.api_keys.list(organization_id=organization_id)
+        ]
+
+    def create_enrollment_key(
+        self,
+        *,
+        actor: User,
+        organization_id: uuid.UUID,
+        payload: EnrollmentApiKeyCreateRequest,
+    ) -> EnrollmentApiKeyCreateResponse:
+        membership = self._require_membership(organization_id, actor.id)
+        self._require_manage(membership.role)
+
+        if payload.device_type_id is not None:
+            self._require_device_type(organization_id, payload.device_type_id)
+        if payload.device_group_id is not None:
+            self._require_device_group(organization_id, payload.device_group_id)
+        if payload.expires_at is not None and payload.expires_at <= datetime.now(UTC):
+            raise ConflictError("invalid_expiry", "Expiry must be in the future.")
+
+        generated = generate_api_key()
+        key = EnrollmentApiKey(
+            organization_id=organization_id,
+            name=payload.name,
+            key_hash=generated.token_hash,
+            key_prefix=generated.display_prefix,
+            device_type_id=payload.device_type_id,
+            device_group_id=payload.device_group_id,
+            expires_at=payload.expires_at,
+            created_by_user_id=actor.id,
+        )
+        self.api_keys.create(key)
+        self.session.commit()
+        self.session.refresh(key)
+
+        base = EnrollmentApiKeyResponse.model_validate(key)
+        return EnrollmentApiKeyCreateResponse(
+            **base.model_dump(),
+            api_key=generated.plaintext,
+        )
+
+    def revoke_enrollment_key(
+        self,
+        *,
+        actor: User,
+        organization_id: uuid.UUID,
+        key_id: uuid.UUID,
+    ) -> EnrollmentApiKeyResponse:
+        membership = self._require_membership(organization_id, actor.id)
+        self._require_manage(membership.role)
+        key = self.api_keys.get(organization_id=organization_id, key_id=key_id)
+        if key is None:
+            raise NotFoundError(
+                "enrollment_key_not_found",
+                "Enrollment API key was not found.",
+            )
+        if key.revoked_at is None:
+            key.revoked_at = datetime.now(UTC)
+            self.api_keys.update(key)
+            self.session.commit()
+            self.session.refresh(key)
+        return EnrollmentApiKeyResponse.model_validate(key)
+
+    # --------------------------------------------------- enrollment requests
+    def list_enrollment_requests(
+        self,
+        *,
+        actor: User,
+        organization_id: uuid.UUID,
+        status: str | None = None,
+    ) -> list[DeviceEnrollmentRequestResponse]:
+        self._require_membership(organization_id, actor.id)
+        return [
+            DeviceEnrollmentRequestResponse.model_validate(item)
+            for item in self.enrollment_requests.list(
+                organization_id=organization_id, status=status
+            )
+        ]
+
+    def approve_enrollment_request(
+        self,
+        *,
+        actor: User,
+        organization_id: uuid.UUID,
+        request_id: uuid.UUID,
+        payload: EnrollmentApproveRequest,
+    ) -> DeviceEnrollmentRequestResponse:
+        membership = self._require_membership(organization_id, actor.id)
+        self._require_manage(membership.role)
+        request = self._require_enrollment_request(organization_id, request_id)
+        if request.status != "pending":
+            raise ConflictError(
+                "enrollment_request_not_pending",
+                "Only pending requests can be approved.",
+            )
+        if payload.device_type_id is not None:
+            self._require_device_type(organization_id, payload.device_type_id)
+            request.device_type_id = payload.device_type_id
+        if payload.device_group_id is not None:
+            self._require_device_group(organization_id, payload.device_group_id)
+            request.device_group_id = payload.device_group_id
+        if payload.name is not None:
+            request.assigned_name = payload.name
+
+        request.status = "approved"
+        request.reviewed_by_user_id = actor.id
+        request.reviewed_at = datetime.now(UTC)
+        self.enrollment_requests.update(request)
+        self.session.commit()
+        self.session.refresh(request)
+        return DeviceEnrollmentRequestResponse.model_validate(request)
+
+    def reject_enrollment_request(
+        self,
+        *,
+        actor: User,
+        organization_id: uuid.UUID,
+        request_id: uuid.UUID,
+        payload: EnrollmentRejectRequest,
+    ) -> DeviceEnrollmentRequestResponse:
+        membership = self._require_membership(organization_id, actor.id)
+        self._require_manage(membership.role)
+        request = self._require_enrollment_request(organization_id, request_id)
+        if request.status != "pending":
+            raise ConflictError(
+                "enrollment_request_not_pending",
+                "Only pending requests can be rejected.",
+            )
+        request.status = "rejected"
+        request.rejection_reason = payload.reason
+        request.reviewed_by_user_id = actor.id
+        request.reviewed_at = datetime.now(UTC)
+        self.enrollment_requests.update(request)
+        self.session.commit()
+        self.session.refresh(request)
+        return DeviceEnrollmentRequestResponse.model_validate(request)
+
+    def _require_enrollment_request(
+        self, organization_id: uuid.UUID, request_id: uuid.UUID
+    ) -> DeviceEnrollmentRequest:
+        request = self.enrollment_requests.get(
+            organization_id=organization_id, request_id=request_id
+        )
+        if request is None:
+            raise NotFoundError(
+                "enrollment_request_not_found",
+                "Enrollment request was not found.",
+            )
+        return request
 
     # ----------------------------------------------------------------- devices
     def list_devices(

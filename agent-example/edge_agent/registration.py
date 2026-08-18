@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from edge_agent.client import EdgeClient
-from edge_agent.config import AgentConfig, AgentPaths, save_config
+from edge_agent.config import AgentConfig, AgentPaths, load_config, save_config
 from edge_agent.credentials import remove_file, write_device_token
 from edge_agent.inventory import collect_inventory
 
@@ -40,12 +40,15 @@ def register(
 
     # Persist the secret credential first (atomic, 0600), then non-secret config.
     write_device_token(paths.token_path, response["device_token"])
+    existing = load_config(paths)
     config = AgentConfig(
         server_url=client.server_url,
         device_id=response["device_id"],
         organization_id=response["organization_id"],
         name=response["name"],
         heartbeat_interval_seconds=int(response.get("heartbeat_interval_seconds", 60)),
+        domain=existing.domain if existing else None,
+        api_base=existing.api_base if existing else None,
     )
     save_config(paths, config)
 

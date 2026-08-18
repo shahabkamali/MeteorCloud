@@ -26,9 +26,7 @@ def test_write_device_token_is_atomic_overwrite(agent_paths) -> None:
     assert read_device_token(agent_paths.token_path) == "dev_two"
     # No stray temp files left behind.
     leftovers = [
-        p.name
-        for p in agent_paths.token_path.parent.iterdir()
-        if p.name.startswith(".tmp")
+        p.name for p in agent_paths.token_path.parent.iterdir() if p.name.startswith(".tmp")
     ]
     assert leftovers == []
 

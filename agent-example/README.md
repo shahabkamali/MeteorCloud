@@ -1,14 +1,15 @@
-# meteor (device agent)
+# meterocli (device agent)
 
-`meteor` is the MeteorCloud device command. It runs on managed Linux devices,
-registers them with the control plane using a registration token, and sends
-periodic heartbeats. It uses only the Python standard library so it runs on
-minimal devices, and it is intentionally simple to serve as a starting point
-for a production agent in any language.
+`meterocli` is the MeteorCloud device command. It runs on managed Linux devices,
+registers them with the control plane, and sends periodic heartbeats. It uses
+only the Python standard library so it runs on minimal devices.
 
-It is structured like a normal Linux tool: a top-level command with
-subcommands, `--help` at every level, `--version`, and environment-variable
-fallbacks for scripting.
+There are **two ways** to enroll a device:
+
+1. An administrator creates a registration token; the device runs `meterocli register`.
+2. The device is configured with an organization API key and runs
+   `meterocli request`; an administrator approves the pending request; the CLI
+   polls and then stores the device credential.
 
 ## Install
 
@@ -17,82 +18,67 @@ cd agent-example
 python -m pip install -e ".[dev]"
 ```
 
-This installs the `meteor` command (the `edge-agent` alias remains available for
-the reference internals).
+This installs the `meterocli` command (`edge-agent` remains as an internal alias).
 
 ## Usage
 
 ```bash
-meteor --help              # top-level help and examples
-meteor <command> --help    # help for a specific command
-meteor --version
+meterocli --help
+meterocli <command> --help
+meterocli --version
 ```
 
-| Command    | Purpose                                        |
-| ---------- | ---------------------------------------------- |
-| `register` | Enroll this device with a registration token.  |
-| `run`      | Send heartbeats (loop, or `--once`).           |
-| `status`   | Show persisted, non-secret configuration.      |
+| Command    | Purpose                                                          |
+| ---------- | ---------------------------------------------------------------- |
+| `config`   | Store the control-plane domain and API key.                      |
+| `register` | Enroll with a one-time registration token (admin-initiated).     |
+| `request`  | Ask to join; wait for admin approval; save the device credential.|
+| `run`      | Send heartbeats (loop, or `--once`).                             |
+| `status`   | Show persisted, non-secret configuration.                        |
 
-Environment variables: `METEOR_SERVER`, `METEOR_TOKEN`, `METEOR_CONFIG_DIR`
-(default config directory: `/etc/meteor`).
+Environment variables: `METEROCLI_DOMAIN`, `METEROCLI_SERVER`, `METEROCLI_API_KEY`,
+`METEROCLI_TOKEN`, `METEROCLI_CONFIG_DIR` (default: `/etc/meterocli`).
 
-## Register a device
+Given a domain such as `meteorxx.com`, the CLI calls `https://api.meteorxx.com`
+unless `--api-base` / `METEROCLI_SERVER` overrides it.
 
-Create a token in the dashboard (**Fleet → Devices → Add device**). The
-plaintext token is shown **once**. Prefer passing it via a file so it does not
-appear in shell history or the process list:
+## Configure the CLI
 
 ```bash
-printf '%s' "reg_..." > /run/meteor.token
-sudo meteor register \
-  --server https://cloud.example.com \
-  --token-file /run/meteor.token \
-  --name edge-01
+sudo meterocli config --domain meteorxx.com --api-key key_...
+meterocli config --show
 ```
 
-Or pass it inline (less secure):
+The API key is stored at `/etc/meterocli/api-key` with `0600` permissions and is
+never printed by `status` or `--show`.
+
+## Path 1 — register with a token
+
+Create a token in the dashboard (**Devices → Add device**). Prefer a token file:
 
 ```bash
-sudo meteor register --server https://cloud.example.com --token reg_...
+printf '%s' "reg_..." > /run/meterocli.token
+sudo meterocli register --token-file /run/meterocli.token --name edge-01
 ```
 
-You can also rely on environment variables:
+Or pass `--server` / `--token` explicitly if the CLI is not yet configured.
+
+## Path 2 — request enrollment
 
 ```bash
-export METEOR_SERVER=https://cloud.example.com
-export METEOR_TOKEN=reg_...
-sudo -E meteor register
+sudo meterocli request --name edge-01
 ```
 
-On success the command:
-
-- collects best-effort inventory (machine ID, serial, MAC addresses, OS, CPU,
-  memory), tolerating anything that is unavailable;
-- stores the device credential atomically at `/etc/meteor/device-token` with
-  `0600` permissions;
-- writes non-secret configuration to `/etc/meteor/config.json`;
-- removes the registration-token file (only after a successful registration).
+The command submits inventory, then polls until an administrator approves or
+rejects the request. On approval it stores the `dev_` credential (once) and
+exits. Use `meterocli run` afterwards.
 
 ## Send heartbeats
 
 ```bash
-meteor run                 # loop forever using the configured interval
-meteor run --once          # send a single heartbeat and exit
-meteor run --interval 30   # override the interval (seconds)
+meterocli run
+meterocli run --once
 ```
-
-The loop uses bounded exponential backoff on transient errors and stops if the
-credential is rejected (so the device can be re-registered).
-
-## Inspect configuration
-
-```bash
-meteor status
-```
-
-Shows the server, device ID, organization, name, heartbeat interval, and whether
-a credential is present. **Credentials are never printed by any command.**
 
 ## Testing
 
@@ -100,13 +86,4 @@ a credential is present. **Credentials are never printed by any command.**
 python -m pytest -q
 ```
 
-Paths are injectable via `--config-dir`, so tests and local runs never touch the
-real `/etc/meteor` location.
-
-## Notes
-
-- The agent talks plain JSON over HTTP(S); nothing is specific to Python on the
-  server side.
-- Use HTTPS in production. Registration over plain HTTP is allowed for now but
-  logged as a warning by the server; the server can be configured to require
-  HTTPS.
+Paths are injectable via `--config-dir`, so tests never touch `/etc/meterocli`.

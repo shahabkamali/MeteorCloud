@@ -57,8 +57,8 @@ heartbeat does not immediately flip a device offline.
 ## Reference agent
 
 ```bash
-edge-agent run          # loop using the advertised interval
-edge-agent run --once   # single heartbeat
+meterocli run          # loop using the advertised interval
+meterocli run --once   # single heartbeat
 ```
 
 The loop uses bounded exponential backoff on transient failures and stops if the

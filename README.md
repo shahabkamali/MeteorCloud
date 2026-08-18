@@ -92,6 +92,8 @@ make ansible-check
 | **Fleet: device types & groups** | [docs/fleet/device-types.md](docs/fleet/device-types.md) |
 | **Fleet: registration tokens** | [docs/fleet/registration-tokens.md](docs/fleet/registration-tokens.md) |
 | **Fleet: device registration** | [docs/fleet/device-registration.md](docs/fleet/device-registration.md) |
+| **Fleet: API keys** | [docs/fleet/enrollment-api-keys.md](docs/fleet/enrollment-api-keys.md) |
+| **Fleet: device-initiated enrollment** | [docs/fleet/device-request-enrollment.md](docs/fleet/device-request-enrollment.md) |
 | **Fleet: device authentication** | [docs/fleet/device-authentication.md](docs/fleet/device-authentication.md) |
 | **Fleet: heartbeat & status** | [docs/fleet/heartbeat.md](docs/fleet/heartbeat.md) |
 | **Reference agent** | [agent-example/README.md](agent-example/README.md) |

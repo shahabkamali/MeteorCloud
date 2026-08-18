@@ -33,6 +33,17 @@ class FakeClient:
         self.heartbeat_error = heartbeat_error
         self.register_calls: list[dict[str, Any]] = []
         self.heartbeat_calls: list[dict[str, Any]] = []
+        self.enroll_request_calls: list[dict[str, Any]] = []
+        self.enroll_poll_calls: list[dict[str, Any]] = []
+        self.enroll_request_response: dict[str, Any] = {
+            "request_id": "req-1",
+            "claim_secret": "clm_secret-value",
+            "status": "pending",
+            "poll_interval_seconds": 1,
+            "expires_at": None,
+        }
+        self.enroll_poll_responses: list[dict[str, Any]] = []
+        self.enroll_request_error: AgentApiError | None = None
 
     def register(
         self,
@@ -51,6 +62,24 @@ class FakeClient:
         if self.heartbeat_error is not None:
             raise self.heartbeat_error
         return {"device_id": "device-1", "status": "online", "heartbeat_interval_seconds": 60}
+
+    def enroll_request(
+        self,
+        *,
+        api_key: str,
+        inventory: dict[str, Any],
+        name: str | None,
+    ) -> dict[str, Any]:
+        self.enroll_request_calls.append({"api_key": api_key, "inventory": inventory, "name": name})
+        if self.enroll_request_error is not None:
+            raise self.enroll_request_error
+        return self.enroll_request_response
+
+    def enroll_poll(self, *, request_id: str, claim_secret: str) -> dict[str, Any]:
+        self.enroll_poll_calls.append({"request_id": request_id, "claim_secret": claim_secret})
+        if self.enroll_poll_responses:
+            return self.enroll_poll_responses.pop(0)
+        return {"status": "pending", "poll_interval_seconds": 1}
 
 
 @pytest.fixture

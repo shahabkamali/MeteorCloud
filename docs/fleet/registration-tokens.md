@@ -1,7 +1,7 @@
 # Registration tokens
 
-A registration token is a shared secret a device uses to self-register into an
-organization. Tokens are the only way a new device joins the fleet.
+Tokens are one of two ways a new device joins the fleet. The other is a
+[device-initiated enrollment request](device-request-enrollment.md).
 
 ## Security model
 
@@ -42,7 +42,7 @@ the **owner** or **admin** role.
 
 ## UI
 
-Create tokens under **Fleet → Registration tokens**. After creation a dialog
+Create tokens under **Fleet → Devices → Add device**. After creation a dialog
 shows the plaintext token **once**, with copy buttons and a ready-to-run
-`edge-agent register` command built from the current site origin. The dialog
+`meterocli register` command built from the current site origin. The dialog
 recommends `--token-file` and clears the secret from memory when closed.

@@ -13,6 +13,12 @@ from dataclasses import dataclass
 
 REGISTRATION_TOKEN_PREFIX = "reg_"
 DEVICE_TOKEN_PREFIX = "dev_"
+# Organization-scoped enrollment API key used by the CLI to submit
+# device-initiated enrollment requests.
+API_KEY_PREFIX = "key_"
+# Per-request secret handed to the device so it can poll for approval and
+# claim its credential exactly once.
+CLAIM_SECRET_PREFIX = "clm_"
 
 # Number of random bytes for the url-safe secret body.
 _SECRET_BYTES = 32
@@ -59,3 +65,13 @@ def generate_registration_token() -> GeneratedToken:
 def generate_device_token() -> GeneratedToken:
     """Generate a new per-device credential (``dev_`` prefix)."""
     return _generate(DEVICE_TOKEN_PREFIX)
+
+
+def generate_api_key() -> GeneratedToken:
+    """Generate a new enrollment API key (``key_`` prefix)."""
+    return _generate(API_KEY_PREFIX)
+
+
+def generate_claim_secret() -> GeneratedToken:
+    """Generate a new enrollment claim secret (``clm_`` prefix)."""
+    return _generate(CLAIM_SECRET_PREFIX)

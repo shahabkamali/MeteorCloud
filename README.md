@@ -1,110 +1,99 @@
 # Edge Platform
 
-Self-hosted Linux Edge Platform — Milestone 1 foundation.
-
-This repository establishes a clean, extensible control-plane foundation.
-Organizations, devices, deployments, MQTT, OTA, Kubernetes, and cloud
-provisioning are intentionally out of scope for this milestone.
+Self-hosted Linux Edge Platform — control plane with modular AWS deployment.
 
 ## What you get
 
 | Area | Purpose |
 | --- | --- |
-| `installer/` | Standalone CLI to install and maintain the control plane |
-| `platform/backend/` | FastAPI API with database, logging, health, auth infrastructure |
-| `platform/frontend/` | React operator UI shell |
-| `infrastructure/` | Terraform / Ansible placeholders |
-| `docs/` | Architecture and development guides |
+| `installer/` | `edge-installer` CLI — Terraform + Ansible deploy |
+| `platform/` | FastAPI backend + React frontend |
+| `infrastructure/` | Modular Terraform modules + Ansible playbooks |
+| `docs/` | Architecture, deployment, and development guides |
+| `installation.yaml` | AWS deploy configuration (copy from example) |
 
-## Quick start
+## Local development
 
 ```bash
 cp .env.example .env
 make dev
-make migrate   # applied automatically on backend container start
-make seed      # optional development users
+make seed      # optional: owner@example.com / dev-password-123
 ```
 
-Then open:
-
 - Frontend: http://localhost:5173
-- Backend health: http://localhost:8000/health
+- Backend: http://localhost:8000/health
 - API docs: http://localhost:8000/docs
 
-Seed login: `owner@example.com` / `dev-password-123`
+Stop: `make stop`
 
-Stop the stack with `make stop`.
-
-## Local tooling
+## AWS deployment (one command)
 
 ```bash
-# Create a Python 3.13 virtualenv first (example with pyenv):
-pyenv local 3.13.5
-python -m venv .venv
-source .venv/bin/activate
+export EDGE_PLATFORM_POSTGRES_PASSWORD='...'
+export EDGE_PLATFORM_JWT_SECRET='...'
 
+# Edit installation.yaml — enable services under services:
+make up        # Terraform + Ansible for all enabled services
+make plan      # preview
+make status-aws
+make down      # destroy
+```
+
+Default services: **cloud_app** (platform app) + **vpn** (WireGuard). Toggle in `installation.yaml`:
+
+```yaml
+services:
+  cloud_app:
+    enabled: true
+  vpn:
+    enabled: false
+```
+
+## Tooling
+
+```bash
+source .venv/bin/activate
 make install
 make test
 make lint
-make format
-```
-
-Installer CLI:
-
-```bash
-cd installer
-pip install -e ".[dev]"
-edge-installer init
-edge-installer validate --config config/examples/installation.yaml
+make terraform-check
+make ansible-check
 ```
 
 ## Repository layout
 
 ```text
-├── installer/          # Standalone platform installer
-├── platform/           # Control-plane backend + frontend
-├── infrastructure/     # Terraform / Ansible (placeholders)
-├── agent-example/      # Reserved for a future edge agent example
-├── docs/               # Architecture and development docs
-├── scripts/            # Helper scripts
-├── docker-compose.yml
-├── docker-compose.dev.yml
-├── Makefile
-└── .env.example
-```
-
-## Design principles
-
-- Readability over cleverness
-- Explicit code over magic
-- Small files and small functions
-- Strong typing
-- Clear module boundaries
-- No premature abstractions
-
-## AWS install (short)
-
-See **[Install quickstart](docs/install-quickstart.md)** — one command for Terraform + Ansible:
-
-```bash
-export EDGE_PLATFORM_POSTGRES_PASSWORD='...'
-export EDGE_PLATFORM_JWT_SECRET='...'
-edge-installer apply installation.yaml
+├── installer/edge_installer/   # CLI, config, service registry
+├── platform/backend/           # FastAPI
+├── platform/frontend/          # React
+├── infrastructure/
+│   ├── terraform/modules/      # cloud_app, vpn, ...
+│   └── ansible/playbooks/      # site.yml, services/
+├── docs/
+├── installation.yaml
+└── Makefile
 ```
 
 ## Documentation
 
-- [Install quickstart (Terraform / Ansible)](docs/install-quickstart.md)
-- [AWS deployment](docs/aws-deployment.md)
-- [AWS prerequisites](docs/aws-prerequisites.md)
-- [Architecture overview](docs/architecture.md)
-- [Development guide](docs/development.md)
-- [Identity and organizations](docs/identity-and-organizations.md)
-- [Installer README](installer/README.md)
-- [Platform README](platform/README.md)
+| Topic | Doc |
+|-------|-----|
+| **Quick install** | [docs/install-quickstart.md](docs/install-quickstart.md) |
+| **Modular services** | [docs/services.md](docs/services.md) |
+| **Configuration** | [docs/installer-configuration.md](docs/installer-configuration.md) |
+| **AWS prerequisites** | [docs/aws-prerequisites.md](docs/aws-prerequisites.md) |
+| **AWS deployment** | [docs/aws-deployment.md](docs/aws-deployment.md) |
+| **Upgrades** | [docs/upgrades.md](docs/upgrades.md) |
+| **Destroy** | [docs/destroy.md](docs/destroy.md) |
+| **Troubleshooting** | [docs/troubleshooting.md](docs/troubleshooting.md) |
+| **Architecture** | [docs/architecture.md](docs/architecture.md) |
+| **Development** | [docs/development.md](docs/development.md) |
+| **Auth & orgs** | [docs/identity-and-organizations.md](docs/identity-and-organizations.md) |
+| **Infrastructure** | [infrastructure/README.md](infrastructure/README.md) |
+| **Installer** | [installer/README.md](installer/README.md) |
 
 ## Milestone status
 
-- **Milestone 1** — foundation (Compose, FastAPI, React shell, installer CLI)
-- **Milestone 2** — identity, organizations, memberships, RBAC
-- **Milestone 3** — AWS EC2 install via Terraform + Ansible (`edge-installer apply`)
+- **Milestone 1** — dev stack, FastAPI/React foundation, installer CLI
+- **Milestone 2** — auth, organizations, memberships, RBAC
+- **Milestone 3** — modular AWS deploy (`cloud_app`, `vpn`), `make up`

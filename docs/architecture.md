@@ -2,18 +2,26 @@
 
 ## Goals
 
-Milestone 1 creates a production-ready foundation for a self-hosted Linux Edge
-Platform control plane. The focus is structure, boundaries, and developer
-experience — not business features.
+The Edge Platform is a self-hosted Linux control plane with a standalone installer, modular AWS deployment, and a FastAPI + React application stack.
 
 ## High-level components
 
 ```text
 ┌────────────────────┐
-│  edge-installer    │  Install / maintain the control plane
+│  edge-installer    │  Install / maintain services on AWS
 │  (standalone CLI)  │
 └─────────┬──────────┘
-          │ deploys
+          │ Terraform + Ansible
+          ▼
+┌──────────────────────────────────────────┐
+│           AWS EC2 (single host)          │
+│  ┌─────────────┐  ┌─────────────────┐  │
+│  │  cloud_app  │  │      vpn        │  │
+│  │ Docker stack│  │   WireGuard     │  │
+│  │ Traefik/API │  │                 │  │
+│  └─────────────┘  └─────────────────┘  │
+└──────────────────────────────────────────┘
+          │
           ▼
 ┌──────────────────────────────────────────┐
 │              Edge Platform               │
@@ -24,82 +32,94 @@ experience — not business features.
 └──────────────────────────────────────────┘
 ```
 
-The platform never knows how it was installed. The installer is a separate
-application that treats the platform as an artifact.
+The platform application never knows how it was installed. The installer is a separate package that deploys it as one of several optional **services**.
 
-## Installer concepts
+## Modular services
 
-### Infrastructure Provider
+| Service | Infrastructure | Software |
+|---------|----------------|----------|
+| `cloud_app` | EC2, SG, EIP (Terraform `modules/cloud_app`) | Docker Compose stack (Ansible) |
+| `vpn` | WireGuard UDP SG rule (Terraform `modules/vpn`) | WireGuard (Ansible `roles/vpn`) |
 
-Owns infrastructure lifecycle:
+Configured in `installation.yaml` under `services:`. Default: both enabled. One command deploys all enabled services: `make up` / `edge-installer apply`.
 
-- `validate()`
-- `plan()`
-- `apply()`
-- `inspect()`
-- `destroy()`
+See [Modular services](services.md).
 
-Milestone 1 includes the interface and an AWS placeholder. No Terraform
-execution yet.
+## Installer architecture
 
-### Platform Component
-
-Owns software lifecycle for one installed piece:
-
-- `validate()`
-- `install()`
-- `configure()`
-- `upgrade()`
-- `uninstall()`
-- `health()`
-
-Placeholders exist for PostgreSQL, Redis, and Traefik.
-
-### Platform Deployment
-
-Orchestrates providers and components to deploy the platform itself.
-Architecture only in Milestone 1.
+```text
+edge-installer
+    |
+    +-- Configuration (installation.yaml)
+    |
+    +-- Service registry (cloud_app, vpn, ...)
+    |
+    +-- AWS provider
+    |       +-- Terraform root stack + modules
+    |
+    +-- Ansible runner
+    |       +-- site.yml → provision + deploy (per service)
+    |
+    +-- State (.installer-state/)
+    |
+    +-- Health verification
+```
 
 ## Backend structure
 
 ```text
 platform/backend/
 ├── app/
-│   ├── api/          # HTTP routers (health only for now)
-│   ├── core/         # config, db, logging, models, security
-│   ├── modules/      # future business modules
-│   └── main.py       # FastAPI application factory
-├── alembic/          # migrations
+│   ├── api/          # health
+│   ├── cli/          # create-admin
+│   ├── core/         # config, db, logging, security
+│   ├── modules/
+│   │   ├── identity/       # auth, users
+│   │   └── organizations/  # orgs, memberships, RBAC
+│   └── main.py
+├── alembic/
 └── tests/
 ```
-
-Dependency injection uses FastAPI `Depends` only.
 
 ## Frontend structure
 
 ```text
 platform/frontend/src/
-├── components/       # shared UI (sidebar, header, primitives)
-├── layouts/          # application shell
-├── pages/            # landing + health
-├── lib/              # utilities and API helpers
-└── App.tsx           # routing
+├── components/
+├── layouts/
+├── pages/            # auth, organizations, dashboard
+├── lib/
+└── App.tsx
 ```
 
-## Explicit non-goals (Milestone 1)
+## Repository layout
 
-- Organizations, devices, deployments
-- MQTT and OTA updates
-- Kubernetes operators
-- Cloud provisioning beyond provider placeholders
-- User registration endpoints
+```text
+├── installer/          # edge-installer CLI
+├── platform/           # backend + frontend
+├── infrastructure/     # Terraform modules + Ansible playbooks
+├── docs/
+├── installation.yaml   # AWS deploy config (local, gitignored state)
+└── Makefile            # make dev, make up, make down, ...
+```
+
+## Milestone scope
+
+| Milestone | Delivered |
+|-----------|-----------|
+| **1** | Compose dev stack, FastAPI/React foundation, installer scaffold |
+| **2** | Auth, organizations, RBAC, frontend org pages |
+| **3** | AWS EC2 deploy, modular Terraform/Ansible, cloud_app + vpn services |
+
+## Explicit non-goals (current)
+
+- Device management, MQTT, OTA
+- Kubernetes, multi-node, RDS, ElastiCache
+- GCP / Azure
+- Zero-downtime upgrades
 
 ## Extension points
 
-Future milestones should add:
-
-1. Business modules under `platform/backend/app/modules/`
-2. Business pages under `platform/frontend/src/pages/`
-3. Real provider implementations under `installer/providers/`
-4. Real component installers under `installer/components/`
-5. Deployment orchestration logic in `installer/deployment/`
+1. New service: Terraform module + Ansible playbook + `services/registry.py` + YAML config
+2. Business modules: `platform/backend/app/modules/`
+3. Remote Terraform state (S3 backend) — designed for, not implemented yet

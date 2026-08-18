@@ -1,14 +1,41 @@
 # AWS deployment
 
-## Application source
+Deploy modular services to a single AWS EC2 instance with one command.
+
+## Quick start
+
+```bash
+export EDGE_PLATFORM_POSTGRES_PASSWORD='...'
+export EDGE_PLATFORM_JWT_SECRET='...'
+
+# Edit installation.yaml — services, region, SSH key, etc.
+make up
+```
+
+Equivalent: `edge-installer apply installation.yaml`
+
+## Configure services
+
+```yaml
+services:
+  cloud_app:
+    enabled: true
+  vpn:
+    enabled: true
+    listen_port: 51820
+    allowed_client_cidrs:
+      - 0.0.0.0/0
+```
+
+See [Modular services](services.md) for details and adding new services.
+
+## Application source (cloud_app)
 
 By default the installer clones and builds from:
 
 ```text
 https://github.com/shahabkamali/MeteorCloud.git
 ```
-
-Configured in `installation.yaml`:
 
 ```yaml
 deployment:
@@ -20,40 +47,40 @@ deployment:
   image_pull_policy: never
 ```
 
-`git@github.com:shahabkamali/MeteorCloud.git` is accepted; Ansible normalizes it to HTTPS for cloning on the EC2 host (no deploy key required for a public repo).
-
-To use a prebuilt registry instead:
+Registry-based deploy:
 
 ```yaml
 deployment:
   image_source: registry
-  backend_image: ghcr.io/shahabkamali/edge-platform-backend:0.2.0
-  frontend_image: ghcr.io/shahabkamali/edge-platform-frontend:0.2.0
+  backend_image: ghcr.io/example/edge-platform-backend:0.2.0
+  frontend_image: ghcr.io/example/edge-platform-frontend:0.2.0
   image_pull_policy: always
 ```
+
+Push app changes to GitHub before deploy when using `image_source: git`.
 
 ## Workflow
 
 ```bash
 edge-installer validate installation.yaml
-edge-installer plan installation.yaml
-edge-installer apply installation.yaml
-edge-installer status installation.yaml
+make plan                              # or edge-installer plan
+make up                                # or edge-installer apply
+make status-aws                        # or edge-installer status
+edge-installer upgrade installation.yaml
+make down                              # or edge-installer destroy --yes
 ```
 
-## What apply does
+## What `apply` / `make up` does
 
 1. Validates configuration and secrets
-2. Creates AWS infrastructure with Terraform
+2. Runs Terraform for **enabled services** (EC2, SG, EIP, VPN rules)
 3. Waits for SSH
-4. Provisions Docker with Ansible
-5. Clones the MeteorCloud repository (when `image_source: git`)
-6. Builds backend/frontend images on the server
-7. Renders `/opt/edge-platform/config/platform.env`
-8. Starts PostgreSQL, Redis, backend, frontend, and Traefik
-9. Runs Alembic migrations
-10. Optionally creates the initial administrator
-11. Verifies health through the public URL
+4. Ansible `site.yml`:
+   - **provision** — Docker, directories (shared)
+   - **deploy** — each enabled service playbook
+5. For `cloud_app`: clone repo, build images, start Compose, migrations, optional admin
+6. For `vpn`: install WireGuard (active when `EDGE_PLATFORM_VPN_SERVER_PRIVATE_KEY` is set)
+7. Health check (cloud_app only)
 
 ## Expected success output
 
@@ -61,6 +88,7 @@ edge-installer status installation.yaml
 Installation completed successfully.
 
 Installation: production
+Services: cloud_app, vpn
 Provider: AWS
 Region: eu-central-1
 Instance ID: i-0123456789abcdef0
@@ -68,18 +96,27 @@ Public IP: 18.198.10.20
 Platform URL: http://18.198.10.20
 ```
 
-## Network layout
+## Network layout (cloud_app)
 
 ```text
 Internet -> Traefik -> /api, /health -> Backend
                      -> /           -> Frontend
-PostgreSQL and Redis remain on the internal Docker network only.
+PostgreSQL and Redis: internal Docker network only
+VPN (optional): UDP 51820 -> WireGuard on host
 ```
 
 ## Limitations
 
 - Single EC2 instance
 - Local Terraform state
+- VPN shares the cloud_app host
 - No automatic DNS management
 - No zero-downtime upgrades
-- Git source builds on the EC2 host (slower than registry pulls; suitable for Milestone 3 demos)
+- Git builds on EC2 (slower than registry pulls)
+
+## Related docs
+
+- [Install quickstart](install-quickstart.md)
+- [AWS prerequisites](aws-prerequisites.md)
+- [Installer configuration](installer-configuration.md)
+- [Troubleshooting](troubleshooting.md)

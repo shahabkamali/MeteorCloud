@@ -100,6 +100,40 @@ class SecretsSettings(BaseModel):
     source: Literal["environment"] = "environment"
 
 
+class CloudAppServiceSettings(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    enabled: bool = True
+
+
+class VpnServiceSettings(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    enabled: bool = True
+    listen_port: int = Field(default=51820, ge=1024, le=65535)
+    network_cidr: str = "10.8.0.0/24"
+    allowed_client_cidrs: list[str] = Field(default_factory=lambda: ["0.0.0.0/0"])
+    server_address: str = "10.8.0.1/24"
+
+
+class ServicesSettings(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    cloud_app: CloudAppServiceSettings = Field(default_factory=CloudAppServiceSettings)
+    vpn: VpnServiceSettings = Field(default_factory=VpnServiceSettings)
+
+    def enabled_map(self) -> dict[str, bool]:
+        return {
+            "cloud_app": self.cloud_app.enabled,
+            "vpn": self.vpn.enabled,
+        }
+
+    def enabled_names(self) -> list[str]:
+        from edge_installer.services.registry import resolve_enabled_services
+
+        return resolve_enabled_services(self.enabled_map())
+
+
 class InstallationConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -107,6 +141,7 @@ class InstallationConfig(BaseModel):
     platform: PlatformSettings
     aws: AwsSettings
     network: NetworkSettings
+    services: ServicesSettings = Field(default_factory=ServicesSettings)
     components: ComponentsSettings = Field(default_factory=ComponentsSettings)
     deployment: DeploymentSettings
     secrets: SecretsSettings = Field(default_factory=SecretsSettings)
@@ -120,3 +155,6 @@ class InstallationConfig(BaseModel):
         if self.components.reverse_proxy.enabled:
             names.append("reverse_proxy")
         return names
+
+    def enabled_service_names(self) -> list[str]:
+        return self.services.enabled_names()

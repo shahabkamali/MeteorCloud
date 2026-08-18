@@ -22,5 +22,6 @@ class InstallationState(BaseModel):
     platform_url: str | None = None
     platform_version: str
     installed_components: list[str] = Field(default_factory=list)
+    enabled_services: list[str] = Field(default_factory=list)
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))

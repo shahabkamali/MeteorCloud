@@ -23,11 +23,17 @@ class TerraformRunner:
 
     def prepare(self) -> None:
         source = infrastructure_root() / "terraform" / "aws"
+        modules_source = infrastructure_root() / "terraform" / "modules"
         self.workdir.mkdir(parents=True, exist_ok=True)
         for name in ("main.tf", "variables.tf", "outputs.tf", "versions.tf"):
             src = source / name
             if src.exists():
                 shutil.copy2(src, self.workdir / name)
+        if modules_source.exists():
+            dest_modules = self.workdir / "modules"
+            if dest_modules.exists():
+                shutil.rmtree(dest_modules)
+            shutil.copytree(modules_source, dest_modules)
 
     def variables(self) -> dict[str, object]:
         cfg = self.config
@@ -35,6 +41,7 @@ class TerraformRunner:
         return {
             "installation_name": cfg.installation.name,
             "environment": cfg.installation.environment,
+            "enabled_services": cfg.enabled_service_names(),
             "aws_region": cfg.aws.region,
             "aws_profile": cfg.aws.profile or "",
             "availability_zone": cfg.aws.availability_zone or "",
@@ -47,6 +54,8 @@ class TerraformRunner:
             "allowed_ssh_cidrs": cfg.network.allowed_ssh_cidrs,
             "allow_http": cfg.network.allow_http,
             "allow_https": cfg.network.allow_https,
+            "vpn_listen_port": cfg.services.vpn.listen_port,
+            "vpn_allowed_client_cidrs": cfg.services.vpn.allowed_client_cidrs,
             "tags": {
                 "Installation": cfg.installation.name,
                 "Environment": cfg.installation.environment,

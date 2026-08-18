@@ -1,55 +1,106 @@
 # AWS deployment prerequisites
 
-Install these tools on your local machine before running the installer:
+## Local tools
 
-- Python 3.13+
-- Terraform 1.5+
-- Ansible 2.15+ (`ansible-playbook`)
-- OpenSSH client (`ssh`)
-- AWS CLI (recommended for credential verification)
+| Tool | Version | Purpose |
+|------|---------|---------|
+| Python | 3.13+ | Installer |
+| Terraform | 1.5+ | AWS infrastructure |
+| Ansible | 2.15+ | Host configuration |
+| OpenSSH | any recent | SSH to EC2 |
+| AWS CLI | recommended | Verify credentials |
+
+Install the installer:
+
+```bash
+cd installer && pip install -e ".[dev]"
+```
 
 ## AWS authentication
 
-Configure credentials using one of:
+One of:
 
-- Environment variables: `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, optional `AWS_SESSION_TOKEN`
-- Shared credentials file: `~/.aws/credentials`
+- `AWS_ACCESS_KEY_ID` + `AWS_SECRET_ACCESS_KEY` (+ optional `AWS_SESSION_TOKEN`)
+- `~/.aws/credentials`
 - Named profile via `aws.profile` in `installation.yaml`
+
+Verify:
+
+```bash
+aws sts get-caller-identity
+```
 
 ## SSH key pair
 
-Create an EC2 key pair in the target region and download the private key:
+Create in the target region:
 
 ```bash
-aws ec2 create-key-pair --key-name edge-platform --query 'KeyMaterial' --output text > ~/.ssh/edge-platform.pem
+aws ec2 create-key-pair \
+  --region eu-central-1 \
+  --key-name edge-platform \
+  --query 'KeyMaterial' --output text > ~/.ssh/edge-platform.pem
+
 chmod 600 ~/.ssh/edge-platform.pem
 ```
 
-Reference the key name and private key path in `installation.yaml`.
+Reference in `installation.yaml`:
+
+```yaml
+aws:
+  ssh_key_name: edge-platform
+  ssh_private_key_path: ~/.ssh/edge-platform.pem
+```
+
+Ensure the PEM file is non-empty. AWS only returns the private key once at creation.
 
 ## IAM permissions
 
-The Terraform configuration creates:
+Terraform creates (per enabled service):
 
-- One EC2 instance
-- One security group
-- Optional Elastic IP and association
-- Root EBS volume settings and tags
+- **cloud_app**: EC2 instance, security group, Elastic IP, EBS volume, tags
+- **vpn**: additional security group ingress rule (UDP WireGuard port)
 
-Minimum practical IAM actions include `ec2:RunInstances`, `ec2:CreateSecurityGroup`, `ec2:AuthorizeSecurityGroupIngress`, `ec2:AllocateAddress`, `ec2:AssociateAddress`, `ec2:CreateTags`, `ec2:Describe*`, and `ec2:TerminateInstances` for destroy.
+Minimum actions: `ec2:RunInstances`, `ec2:CreateSecurityGroup`, `ec2:AuthorizeSecurityGroupIngress`, `ec2:RevokeSecurityGroupIngress`, `ec2:AllocateAddress`, `ec2:AssociateAddress`, `ec2:CreateTags`, `ec2:Describe*`, `ec2:TerminateInstances`.
 
-Administrator access is not required when scoped to EC2 resources in the deployment region.
+Scoped EC2 permissions in the deployment region are sufficient.
 
-## Required secrets
+## Secrets
 
-Export secrets before `validate`, `plan`, or `apply`:
+Export before `validate`, `plan`, or `apply`:
 
 ```bash
+# Required when cloud_app is enabled
 export EDGE_PLATFORM_POSTGRES_PASSWORD='...'
 export EDGE_PLATFORM_JWT_SECRET='...'
-export EDGE_PLATFORM_ADMIN_EMAIL='admin@example.com'   # optional
-export EDGE_PLATFORM_ADMIN_PASSWORD='...'              # optional
-export EDGE_PLATFORM_ACME_EMAIL='ops@example.com'      # required for HTTPS with a domain
+
+# Optional
+export EDGE_PLATFORM_ADMIN_EMAIL='admin@example.com'
+export EDGE_PLATFORM_ADMIN_PASSWORD='...'
+export EDGE_PLATFORM_ACME_EMAIL='ops@example.com'
+export EDGE_PLATFORM_VPN_SERVER_PRIVATE_KEY='...'
+export EDGE_PLATFORM_REDIS_PASSWORD='...'
 ```
 
-Never commit secrets or store them in `installation.yaml`.
+Generate a WireGuard private key:
+
+```bash
+wg genkey   # use output as EDGE_PLATFORM_VPN_SERVER_PRIVATE_KEY
+```
+
+## Configuration file
+
+Copy the example and edit:
+
+```bash
+cp installer/edge_installer/config/examples/installation.yaml ./installation.yaml
+```
+
+Set `network.allowed_ssh_cidrs` to your public IP `/32` (or wider for testing).
+
+## Deploy
+
+```bash
+make up
+```
+
+See [Install quickstart](install-quickstart.md) and [AWS deployment](aws-deployment.md).

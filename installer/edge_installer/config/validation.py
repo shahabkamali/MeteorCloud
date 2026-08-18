@@ -38,23 +38,28 @@ def validate_configuration(config: InstallationConfig) -> list[str]:
     if not config.network.allowed_ssh_cidrs:
         errors.append("network.allowed_ssh_cidrs must not be empty")
 
-    if not config.components.postgres.enabled:
-        errors.append("components.postgres must be enabled for this milestone")
+    enabled_services = config.enabled_service_names()
+    if not enabled_services:
+        errors.append("At least one service must be enabled under services")
 
-    if not config.components.reverse_proxy.enabled:
-        errors.append("components.reverse_proxy must be enabled for this milestone")
+    if config.services.vpn.enabled and not config.services.cloud_app.enabled:
+        errors.append("services.vpn requires services.cloud_app to be enabled")
 
-    if not config.deployment.backend_image.strip():
-        errors.append("deployment.backend_image must be configured")
-    if not config.deployment.frontend_image.strip():
-        errors.append("deployment.frontend_image must be configured")
+    if config.services.cloud_app.enabled:
+        if not config.components.postgres.enabled:
+            errors.append("components.postgres must be enabled when cloud_app is enabled")
+        if not config.components.reverse_proxy.enabled:
+            errors.append("components.reverse_proxy must be enabled when cloud_app is enabled")
+        if not config.deployment.backend_image.strip():
+            errors.append("deployment.backend_image must be configured")
+        if not config.deployment.frontend_image.strip():
+            errors.append("deployment.frontend_image must be configured")
+        for var in REQUIRED_SECRET_VARS:
+            if not os.environ.get(var):
+                errors.append(f"{var} is not set")
 
     if config.platform.domain and config.platform.public_url:
         errors.append("platform.domain and platform.public_url cannot both be set")
-
-    for var in REQUIRED_SECRET_VARS:
-        if not os.environ.get(var):
-            errors.append(f"{var} is not set")
 
     return errors
 

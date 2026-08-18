@@ -22,11 +22,13 @@ def build_ansible_extra_vars(
     outputs: TerraformOutputs,
 ) -> dict[str, str]:
     url = platform_url(config, outputs)
-    return {
+    enabled = config.enabled_service_names()
+    extra: dict[str, str] = {
         "installation_name": config.installation.name,
         "platform_version": config.platform.version,
         "platform_domain": config.platform.domain or "",
         "platform_public_url": url,
+        "enabled_services": enabled,
         "repository_url": config.deployment.repository_url,
         "git_ref": config.deployment.git_ref,
         "image_source": config.deployment.image_source,
@@ -36,7 +38,14 @@ def build_ansible_extra_vars(
         "postgres_database": config.components.postgres.database_name,
         "postgres_username": config.components.postgres.username,
         "platform_env": config.installation.environment,
+        "vpn_listen_port": str(config.services.vpn.listen_port),
+        "vpn_network_cidr": config.services.vpn.network_cidr,
+        "vpn_server_address": config.services.vpn.server_address,
     }
+    vpn_key = os.environ.get("EDGE_PLATFORM_VPN_SERVER_PRIVATE_KEY", "")
+    if vpn_key:
+        extra["vpn_server_private_key"] = vpn_key
+    return extra
 
 
 def secret_env_vars() -> dict[str, str]:

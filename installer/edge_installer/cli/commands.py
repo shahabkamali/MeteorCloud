@@ -77,6 +77,7 @@ def run_apply(*, config_path: Path, console: Console) -> None:
 
     console.print("\n[green bold]Installation completed successfully.[/green bold]\n")
     console.print(f"Installation: {config.installation.name}")
+    console.print(f"Services: {', '.join(config.enabled_service_names())}")
     console.print("Provider: AWS")
     console.print(f"Region: {config.aws.region}")
     console.print(f"Instance ID: {result.outputs.instance_id}")

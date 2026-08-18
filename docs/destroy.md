@@ -1,18 +1,42 @@
 # Destroy an installation
 
-Destroy removes AWS infrastructure created by Terraform and deletes local installer state.
+Removes AWS resources and local installer state for all enabled services.
+
+## Commands
 
 ```bash
-edge-installer destroy installation.yaml
+edge-installer destroy installation.yaml          # prompts for confirmation
 edge-installer destroy installation.yaml --yes
+
+make down                                         # same as destroy --yes
 ```
 
-Warnings:
+## What happens
 
-- PostgreSQL data on the EC2 instance is destroyed with the server
-- Elastic IPs allocated for the installation are released
-- This action cannot be undone
+1. Ansible `destroy.yml` (when SSH works):
+   - Stops WireGuard if `vpn` was enabled
+   - Stops Docker Compose stack if `cloud_app` was enabled
+2. `terraform destroy` — EC2, SG, EIP, VPN rules
+3. Deletes `.installer-state/<name>/installation.json`
 
-Confirm the installation name and region before proceeding.
+## Warnings
 
-If destroy fails partway, inspect `.installer-state/<name>/terraform/` and AWS console resources before retrying.
+- **All data on the EC2 instance is lost** (PostgreSQL, Redis, VPN config)
+- Elastic IP is released
+- Cannot be undone
+
+Confirm installation name and region before proceeding.
+
+## Partial failure
+
+If destroy fails:
+
+1. Check SSH access to the instance
+2. Inspect `.installer-state/<name>/terraform/terraform.tfstate`
+3. Review resources in AWS console
+4. Retry `edge-installer destroy installation.yaml --yes`
+
+## Related
+
+- [AWS deployment](aws-deployment.md)
+- [Troubleshooting](troubleshooting.md)

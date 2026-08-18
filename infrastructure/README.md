@@ -1,13 +1,85 @@
 # Infrastructure
 
-Placeholder tree for future infrastructure-as-code.
+Terraform and Ansible for deploying modular services to AWS.
 
-## Terraform (AWS)
+## Layout
 
-`terraform/aws/` will hold AWS modules used by the installer AWS provider.
-No Terraform modules are implemented in Milestone 1.
+```text
+infrastructure/
+├── terraform/
+│   ├── aws/                    # Root stack — orchestrates modules
+│   │   ├── main.tf
+│   │   ├── variables.tf
+│   │   ├── outputs.tf
+│   │   └── versions.tf
+│   └── modules/
+│       ├── cloud_app/          # EC2, security group, Elastic IP
+│       └── vpn/                # WireGuard UDP ingress rules
+└── ansible/
+    ├── ansible.cfg
+    ├── playbooks/
+    │   ├── site.yml            # Entry: provision + deploy
+    │   ├── provision.yml       # Shared host setup (Docker, dirs)
+    │   ├── deploy.yml          # Imports enabled service playbooks
+    │   ├── upgrade.yml
+    │   ├── destroy.yml
+    │   └── services/
+    │       ├── cloud_app.yml
+    │       └── vpn.yml
+    ├── roles/
+    │   ├── common/
+    │   ├── docker/
+    │   ├── platform_*/
+    │   └── vpn/
+    └── templates/
+```
 
-## Ansible
+## Services
 
-`ansible/` will hold configuration management playbooks for host-level setup.
-No playbooks are implemented in Milestone 1.
+| Service | Terraform module | Ansible playbook | Description |
+|---------|------------------|------------------|-------------|
+| `cloud_app` | `modules/cloud_app` | `services/cloud_app.yml` | Edge Platform (Docker, Traefik, Postgres, Redis) |
+| `vpn` | `modules/vpn` | `services/vpn.yml` | WireGuard VPN on the same EC2 host |
+
+Enable or disable services in `installation.yaml` under `services:`. The installer passes `enabled_services` to Terraform and Ansible.
+
+See [Modular services](../docs/services.md) for configuration and adding new services.
+
+## How it is run
+
+Normally you do **not** run Terraform or Ansible directly. Use:
+
+```bash
+make up      # edge-installer apply — Terraform + Ansible for enabled services
+make down    # destroy
+make plan    # preview
+```
+
+The installer copies Terraform modules into `.installer-state/<name>/terraform/` and runs playbooks with generated inventory and extra-vars.
+
+## Manual use (debugging)
+
+```bash
+# Terraform (after installer has prepared workdir)
+cd .installer-state/production/terraform
+terraform plan -var-file=terraform.tfvars.json
+
+# Ansible
+cd infrastructure/ansible
+ansible-playbook playbooks/site.yml \
+  -i ../../.installer-state/production/inventory.ini \
+  -e @../../.installer-state/production/extra-vars.json
+```
+
+## Validation
+
+```bash
+make terraform-check
+make ansible-check
+```
+
+## Further reading
+
+- [Install quickstart](../docs/install-quickstart.md)
+- [AWS deployment](../docs/aws-deployment.md)
+- [AWS prerequisites](../docs/aws-prerequisites.md)

@@ -8,6 +8,12 @@ variable "environment" {
   description = "Deployment environment"
 }
 
+variable "enabled_services" {
+  type        = list(string)
+  description = "Services to provision (cloud_app, vpn, ...)"
+  default     = ["cloud_app", "vpn"]
+}
+
 variable "aws_region" {
   type        = string
   description = "AWS region"
@@ -81,6 +87,18 @@ variable "allow_https" {
   type        = bool
   default     = true
   description = "Allow HTTPS from the internet"
+}
+
+variable "vpn_listen_port" {
+  type        = number
+  default     = 51820
+  description = "WireGuard UDP port when vpn service is enabled"
+}
+
+variable "vpn_allowed_client_cidrs" {
+  type        = list(string)
+  default     = ["0.0.0.0/0"]
+  description = "CIDR blocks allowed to connect to WireGuard"
 }
 
 variable "tags" {

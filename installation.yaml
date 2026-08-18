@@ -25,6 +25,17 @@ network:
   allow_http: true
   allow_https: true
 
+services:
+  cloud_app:
+    enabled: true
+  vpn:
+    enabled: true
+    listen_port: 51820
+    network_cidr: 10.8.0.0/24
+    allowed_client_cidrs:
+      - 0.0.0.0/0
+    server_address: 10.8.0.1/24
+
 components:
   postgres:
     enabled: true

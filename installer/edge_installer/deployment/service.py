@@ -23,17 +23,6 @@ from edge_installer.state.store import InstallationLock, load_state, save_state
 
 logger = logging.getLogger(__name__)
 
-STAGES = (
-    "Validating configuration",
-    "Planning AWS infrastructure",
-    "Creating EC2 instance",
-    "Waiting for SSH",
-    "Installing Docker",
-    "Deploying platform",
-    "Running migrations",
-    "Verifying health",
-)
-
 
 @dataclass(frozen=True)
 class ApplyResult:
@@ -54,29 +43,48 @@ class PlatformDeploymentService:
 
     def plan(self) -> dict[str, object]:
         self.validate()
-        return self.provider.plan()
+        result = self.provider.plan()
+        result["enabled_services"] = self.config.enabled_service_names()
+        return result
 
     def apply(self) -> ApplyResult:
         self.validate()
+        enabled = self.config.enabled_service_names()
         name = self.config.installation.name
+        total_stages = 5 + len(enabled)
+
         with InstallationLock(name):
-            logger.info("[1/8] %s", STAGES[0])
+            stage = 1
+            logger.info("[%s/%s] Validating configuration", stage, total_stages)
+            stage += 1
+
+            logger.info("[%s/%s] Applying Terraform (services: %s)", stage, total_stages, enabled)
             outputs = self._apply_infrastructure()
-            logger.info("[4/8] %s", STAGES[3])
+            stage += 1
+
+            logger.info("[%s/%s] Waiting for SSH", stage, total_stages)
             self._wait_for_ssh(outputs)
-            logger.info("[5/8] %s", STAGES[4])
-            self._provision_server(outputs)
-            logger.info("[6/8] %s", STAGES[5])
-            self._deploy_platform(outputs)
-            logger.info("[7/8] %s", STAGES[6])
-            url = platform_url(self.config, outputs)
-            logger.info("[8/8] %s", STAGES[7])
-            report = self.health.verify(
-                url,
-                timeout_seconds=self.config.deployment.health_check_timeout_seconds,
-            )
-            state = self._save_state(outputs, url, report.as_dict())
-            return ApplyResult(state=state, outputs=outputs, health=report.as_dict())
+            stage += 1
+
+            logger.info("[%s/%s] Running Ansible (provision + deploy)", stage, total_stages)
+            self._run_site(outputs)
+            stage += 1
+
+            health: dict[str, str] = {"status": "skipped"}
+            if "cloud_app" in enabled:
+                logger.info("[%s/%s] Verifying cloud app health", stage, total_stages)
+                url = platform_url(self.config, outputs)
+                report = self.health.verify(
+                    url,
+                    timeout_seconds=self.config.deployment.health_check_timeout_seconds,
+                )
+                health = report.as_dict()
+            else:
+                logger.info("[%s/%s] Skipping cloud app health (cloud_app disabled)", stage, total_stages)
+
+            url = platform_url(self.config, outputs) if "cloud_app" in enabled else None
+            state = self._save_state(outputs, url, health, enabled)
+            return ApplyResult(state=state, outputs=outputs, health=health)
 
     def status(self) -> dict[str, object]:
         state = load_state(self.config.installation.name)
@@ -84,7 +92,7 @@ class PlatformDeploymentService:
         try:
             outputs = self.provider.terraform.read_outputs()
             result["infrastructure"] = outputs.model_dump()
-            if state and state.platform_url:
+            if state and state.platform_url and "cloud_app" in self.config.enabled_service_names():
                 result["health"] = self.health.verify(
                     state.platform_url,
                     timeout_seconds=self.config.deployment.health_check_timeout_seconds,
@@ -97,6 +105,7 @@ class PlatformDeploymentService:
         state = load_state(self.config.installation.name)
         if state is None:
             raise InstallerError("Installation not found.", stage="upgrade")
+        enabled = self.config.enabled_service_names()
         name = self.config.installation.name
         with InstallationLock(name):
             outputs = self.provider.terraform.read_outputs()
@@ -104,15 +113,19 @@ class PlatformDeploymentService:
             inventory = installation_dir(name) / "inventory.ini"
             write_inventory(path=inventory, outputs=outputs, config=self.config)
             self.ansible.run_playbook("upgrade.yml", inventory=inventory, extra_vars=extra)
+            health: dict[str, str] = {"status": "skipped"}
             url = platform_url(self.config, outputs)
-            report = self.health.verify(
-                url,
-                timeout_seconds=self.config.deployment.health_check_timeout_seconds,
-            )
+            if "cloud_app" in enabled:
+                report = self.health.verify(
+                    url,
+                    timeout_seconds=self.config.deployment.health_check_timeout_seconds,
+                )
+                health = report.as_dict()
             state.platform_version = self.config.platform.version
+            state.enabled_services = enabled
             state.updated_at = datetime.now(UTC)
             save_state(state)
-            return ApplyResult(state=state, outputs=outputs, health=report.as_dict())
+            return ApplyResult(state=state, outputs=outputs, health=health)
 
     def destroy(self) -> None:
         name = self.config.installation.name
@@ -131,10 +144,11 @@ class PlatformDeploymentService:
                     )
                     inventory = installation_dir(name) / "inventory.ini"
                     write_inventory(path=inventory, outputs=outputs, config=self.config)
+                    extra = build_ansible_extra_vars(self.config, outputs)
                     self.ansible.run_playbook(
                         "destroy.yml",
                         inventory=inventory,
-                        extra_vars={"installation_name": name},
+                        extra_vars=extra,
                     )
             except InstallerError:
                 logger.warning("Remote destroy playbook skipped or failed.")
@@ -143,9 +157,7 @@ class PlatformDeploymentService:
             state_path.unlink(missing_ok=True)
 
     def _apply_infrastructure(self) -> TerraformOutputs:
-        logger.info("[2/8] %s", STAGES[1])
         self.provider.terraform.init()
-        logger.info("[3/8] %s", STAGES[2])
         return self.provider.apply()
 
     def _wait_for_ssh(self, outputs: TerraformOutputs) -> None:
@@ -157,22 +169,18 @@ class PlatformDeploymentService:
             timeout_seconds=self.config.deployment.health_check_timeout_seconds,
         )
 
-    def _provision_server(self, outputs: TerraformOutputs) -> None:
+    def _run_site(self, outputs: TerraformOutputs) -> None:
         inventory = installation_dir(self.config.installation.name) / "inventory.ini"
         write_inventory(path=inventory, outputs=outputs, config=self.config)
         extra = build_ansible_extra_vars(self.config, outputs)
-        self.ansible.run_playbook("provision.yml", inventory=inventory, extra_vars=extra)
-
-    def _deploy_platform(self, outputs: TerraformOutputs) -> None:
-        inventory = installation_dir(self.config.installation.name) / "inventory.ini"
-        extra = build_ansible_extra_vars(self.config, outputs)
-        self.ansible.run_playbook("deploy.yml", inventory=inventory, extra_vars=extra)
+        self.ansible.run_playbook("site.yml", inventory=inventory, extra_vars=extra)
 
     def _save_state(
         self,
         outputs: TerraformOutputs,
-        url: str,
+        url: str | None,
         health: dict[str, str],
+        enabled_services: list[str],
     ) -> InstallationState:
         existing = load_state(self.config.installation.name)
         state = existing or InstallationState(
@@ -188,5 +196,6 @@ class PlatformDeploymentService:
         state.platform_url = url
         state.platform_version = self.config.platform.version
         state.installed_components = self.config.enabled_component_names()
+        state.enabled_services = enabled_services
         save_state(state)
         return state

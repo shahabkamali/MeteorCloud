@@ -1,4 +1,4 @@
-.PHONY: help dev stop test lint format typecheck install-backend install-frontend install-installer clean migrate seed backend-test frontend-test installer-test terraform-check ansible-check
+.PHONY: help dev stop up down plan status-aws test lint format typecheck install-backend install-frontend install-installer clean migrate seed backend-test frontend-test installer-test terraform-check ansible-check
 
 COMPOSE := docker compose -f docker-compose.yml -f docker-compose.dev.yml
 BACKEND_DIR := platform/backend
@@ -23,6 +23,19 @@ dev: ## Start the development stack
 
 stop: ## Stop the development stack
 	$(COMPOSE) down
+
+up: ## Deploy all enabled AWS services (Terraform + Ansible)
+	@test -f $(CONFIG) || (echo "Missing $(CONFIG). Copy from installer/edge_installer/config/examples/installation.yaml" && exit 1)
+	cd $(INSTALLER_DIR) && edge-installer apply $(CONFIG)
+
+down: ## Destroy AWS installation
+	cd $(INSTALLER_DIR) && edge-installer destroy $(CONFIG) --yes
+
+plan: ## Preview AWS changes for enabled services
+	cd $(INSTALLER_DIR) && edge-installer plan $(CONFIG)
+
+status-aws: ## Show AWS installation status and health
+	cd $(INSTALLER_DIR) && edge-installer status $(CONFIG)
 
 logs: ## Tail development stack logs
 	$(COMPOSE) logs -f
@@ -84,13 +97,19 @@ installer-test: ## Run installer tests only
 	cd $(INSTALLER_DIR) && python -m pytest -q
 
 terraform-check: ## Validate Terraform formatting and syntax
+	rm -rf $(INFRA_DIR)/terraform/aws/modules
+	cp -r $(INFRA_DIR)/terraform/modules $(INFRA_DIR)/terraform/aws/modules
 	cd $(INFRA_DIR)/terraform/aws && terraform fmt -check
 	cd $(INFRA_DIR)/terraform/aws && terraform init -backend=false -input=false
 	cd $(INFRA_DIR)/terraform/aws && terraform validate
+	rm -rf $(INFRA_DIR)/terraform/aws/modules
 
 ansible-check: ## Run Ansible syntax checks
+	cd $(INFRA_DIR)/ansible && ansible-playbook --syntax-check playbooks/site.yml
 	cd $(INFRA_DIR)/ansible && ansible-playbook --syntax-check playbooks/provision.yml
 	cd $(INFRA_DIR)/ansible && ansible-playbook --syntax-check playbooks/deploy.yml
+	cd $(INFRA_DIR)/ansible && ansible-playbook --syntax-check playbooks/services/cloud_app.yml
+	cd $(INFRA_DIR)/ansible && ansible-playbook --syntax-check playbooks/services/vpn.yml
 	cd $(INFRA_DIR)/ansible && ansible-playbook --syntax-check playbooks/upgrade.yml
 	cd $(INFRA_DIR)/ansible && ansible-playbook --syntax-check playbooks/destroy.yml
 

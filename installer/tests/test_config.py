@@ -54,7 +54,12 @@ def test_invalid_configuration_reports_field(tmp_path: Path) -> None:
         "  allowed_ssh_cidrs: ['203.0.113.10/32']\n"
         "deployment:\n"
         "  backend_image: edge-platform-backend:0.2.0\n"
-        "  frontend_image: edge-platform-frontend:0.2.0\n",
+        "  frontend_image: edge-platform-frontend:0.2.0\n"
+        "services:\n"
+        "  cloud_app:\n"
+        "    enabled: true\n"
+        "  vpn:\n"
+        "    enabled: false\n",
         encoding="utf-8",
     )
 

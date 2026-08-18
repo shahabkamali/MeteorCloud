@@ -1,43 +1,101 @@
 # Edge Platform Installer
 
-The installer is a standalone CLI used to install and maintain the Edge Platform
-control plane. The platform never knows how it was installed.
-
-## Concepts
-
-| Concept | Responsibility |
-| --- | --- |
-| **Infrastructure Provider** | Provision and manage infrastructure (e.g. AWS) |
-| **Platform Component** | Install and manage software pieces (PostgreSQL, Redis, Traefik) |
-| **Platform Deployment** | Orchestrate deploying the platform itself |
-
-## Requirements
-
-- Python 3.13+
-- Typer, PyYAML, Pydantic v2
+Standalone CLI (`edge-installer`) to install and maintain the Edge Platform on AWS. The platform application does not know how it was installed.
 
 ## Quick start
 
 ```bash
 cd installer
-python -m pip install -e ".[dev]"
+pip install -e ".[dev]"
 
-edge-installer init
-edge-installer validate --config config/examples/installation.yaml
-edge-installer plan --config config/examples/installation.yaml
-edge-installer apply --config config/examples/installation.yaml
-edge-installer status
-edge-installer upgrade
-edge-installer destroy
+# From repo root — copy and edit config first
+edge-installer init -o ../installation.yaml
+
+export EDGE_PLATFORM_POSTGRES_PASSWORD='...'
+export EDGE_PLATFORM_JWT_SECRET='...'
+
+edge-installer validate ../installation.yaml
+make -C .. up          # or: edge-installer apply ../installation.yaml
+```
+
+## Commands
+
+| Command | Description |
+|---------|-------------|
+| `edge-installer init` | Create sample `installation.yaml` |
+| `edge-installer validate [config]` | Check config, secrets, tools, AWS creds |
+| `edge-installer plan [config]` | Terraform plan (no changes) |
+| `edge-installer apply [config]` | Terraform + Ansible + health check |
+| `edge-installer status [config]` | State, infrastructure, health |
+| `edge-installer upgrade [config]` | Update enabled services on existing host |
+| `edge-installer destroy [config]` | Tear down AWS + local state |
+
+Config path can be positional (`installation.yaml`) or `--config installation.yaml`.
+
+Makefile equivalents from repo root: `make up`, `make down`, `make plan`, `make status-aws`.
+
+## Modular services
+
+Configure which stacks to deploy in `installation.yaml`:
+
+```yaml
+services:
+  cloud_app:
+    enabled: true
+  vpn:
+    enabled: true
+```
+
+Service definitions live in `edge_installer/services/registry.py`. Each service maps to Terraform modules and Ansible playbooks under `infrastructure/`.
+
+See [Modular services](../docs/services.md).
+
+## Package layout
+
+```text
+installer/edge_installer/
+├── cli/              # Typer CLI
+├── config/           # YAML loading and validation
+├── services/         # Service registry (cloud_app, vpn, ...)
+├── providers/aws/    # Terraform integration
+├── deployment/       # Ansible, SSH, orchestration
+├── state/            # Local state and locking
+├── health/           # Post-deploy checks
+└── process/          # Subprocess runner
 ```
 
 ## Configuration
 
-See `config/examples/installation.yaml` for a complete example.
+Example: `edge_installer/config/examples/installation.yaml`
 
-## Milestone 1 scope
+Documentation: [Installer configuration](../docs/installer-configuration.md)
 
-This milestone provides interfaces, configuration loading, and CLI commands.
-Provider and component methods raise `NotImplementedError` or print a friendly
-"Not implemented yet" message. Infrastructure provisioning and component
-installation arrive in later milestones.
+## State
+
+```text
+.installer-state/<installation-name>/
+├── installation.json
+├── inventory.ini
+├── extra-vars.json
+├── install.lock
+└── terraform/
+    ├── modules/          # copied at apply time
+    └── terraform.tfstate
+```
+
+Never commit `.installer-state/` or secrets.
+
+## Development
+
+```bash
+cd installer
+pip install -e ".[dev]"
+python -m pytest -q
+python -m ruff check .
+```
+
+## Documentation
+
+- [Install quickstart](../docs/install-quickstart.md)
+- [AWS prerequisites](../docs/aws-prerequisites.md)
+- [Troubleshooting](../docs/troubleshooting.md)

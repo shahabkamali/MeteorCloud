@@ -1,17 +1,17 @@
 output "instance_id" {
-  value = aws_instance.platform.id
+  value = length(module.cloud_app) > 0 ? module.cloud_app[0].instance_id : ""
 }
 
 output "public_ip" {
-  value = var.assign_elastic_ip ? aws_eip.platform[0].public_ip : aws_instance.platform.public_ip
+  value = length(module.cloud_app) > 0 ? module.cloud_app[0].public_ip : ""
 }
 
 output "elastic_ip" {
-  value = var.assign_elastic_ip ? aws_eip.platform[0].public_ip : ""
+  value = length(module.cloud_app) > 0 ? module.cloud_app[0].elastic_ip : ""
 }
 
 output "private_ip" {
-  value = aws_instance.platform.private_ip
+  value = length(module.cloud_app) > 0 ? module.cloud_app[0].private_ip : ""
 }
 
 output "region" {
@@ -23,5 +23,13 @@ output "ssh_username" {
 }
 
 output "security_group_id" {
-  value = aws_security_group.platform.id
+  value = length(module.cloud_app) > 0 ? module.cloud_app[0].security_group_id : ""
+}
+
+output "enabled_services" {
+  value = var.enabled_services
+}
+
+output "vpn_listen_port" {
+  value = length(module.vpn) > 0 ? module.vpn[0].listen_port : var.vpn_listen_port
 }

@@ -242,6 +242,40 @@ describe("Devices list", () => {
       );
     });
   });
+
+  it("deletes a device after confirmation", async () => {
+    const user = userEvent.setup();
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    vi.mocked(fleetApi.listDevices).mockResolvedValue({
+      items: [device],
+      total: 1,
+      page: 1,
+      page_size: 10,
+    });
+    vi.mocked(fleetApi.deleteDevice).mockResolvedValue(undefined);
+
+    renderApp(["/organizations/org-1/devices"]);
+    await user.click(await screen.findByRole("button", { name: /^delete$/i }));
+
+    await waitFor(() => {
+      expect(fleetApi.deleteDevice).toHaveBeenCalledWith("token-123", "org-1", "device-1");
+    });
+    vi.mocked(window.confirm).mockRestore();
+  });
+
+  it("hides device delete for viewers", async () => {
+    vi.mocked(orgApi.getOrganization).mockResolvedValue(org("viewer"));
+    vi.mocked(fleetApi.listDevices).mockResolvedValue({
+      items: [device],
+      total: 1,
+      page: 1,
+      page_size: 10,
+    });
+
+    renderApp(["/organizations/org-1/devices"]);
+    expect(await screen.findByRole("link", { name: "edge-01" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^delete$/i })).not.toBeInTheDocument();
+  });
 });
 
 describe("Device detail", () => {

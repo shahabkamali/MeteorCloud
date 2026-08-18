@@ -5,7 +5,8 @@ from __future__ import annotations
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
-from tests.conftest import auth_header, create_org_with_owner, create_user
+from app.modules.organizations.models import OrganizationRole
+from tests.conftest import add_member, auth_header, create_org_with_owner, create_user
 
 
 def _register(client: TestClient, org_id, headers, **payload) -> dict:
@@ -165,3 +166,57 @@ def test_rotate_and_revoke_credential(client: TestClient, db_session: Session) -
         ).status_code
         == 401
     )
+
+
+def test_delete_device(client: TestClient, db_session: Session) -> None:
+    owner = create_user(db_session, email="owner@example.com")
+    org, _ = create_org_with_owner(db_session, owner)
+    headers = auth_header(client, "owner@example.com")
+    reg = _register(client, org.id, headers, name="edge-01", machine_id="m-1")
+    device_id = reg["device_id"]
+
+    deleted = client.delete(
+        f"/api/v1/organizations/{org.id}/devices/{device_id}",
+        headers=headers,
+    )
+    assert deleted.status_code == 204
+
+    missing = client.get(
+        f"/api/v1/organizations/{org.id}/devices/{device_id}",
+        headers=headers,
+    )
+    assert missing.status_code == 404
+
+    listed = client.get(f"/api/v1/organizations/{org.id}/devices", headers=headers)
+    assert listed.json()["total"] == 0
+
+    assert (
+        client.post(
+            "/api/v1/agent/heartbeat",
+            headers={"Authorization": f"Bearer {reg['device_token']}"},
+            json={},
+        ).status_code
+        == 401
+    )
+
+
+def test_member_cannot_delete_device(client: TestClient, db_session: Session) -> None:
+    owner = create_user(db_session, email="owner@example.com")
+    member = create_user(db_session, email="member@example.com")
+    org, _ = create_org_with_owner(db_session, owner)
+    add_member(db_session, org, member, OrganizationRole.MEMBER)
+    owner_headers = auth_header(client, "owner@example.com")
+    member_headers = auth_header(client, "member@example.com")
+    reg = _register(client, org.id, owner_headers, name="edge-01", machine_id="m-1")
+
+    denied = client.delete(
+        f"/api/v1/organizations/{org.id}/devices/{reg['device_id']}",
+        headers=member_headers,
+    )
+    assert denied.status_code == 403
+
+    still_there = client.get(
+        f"/api/v1/organizations/{org.id}/devices/{reg['device_id']}",
+        headers=owner_headers,
+    )
+    assert still_there.status_code == 200

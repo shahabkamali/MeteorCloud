@@ -1,8 +1,9 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Link, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 
 import {
+  deleteDevice,
   getDevice,
   listDeviceGroups,
   listDeviceTypes,
@@ -33,6 +34,7 @@ function Detail({ label, value }: { label: string; value: string | null | undefi
 export function DeviceDetailPage() {
   const { organizationId = "", deviceId = "" } = useParams();
   const { token } = useAuth();
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [error, setError] = useState<string | null>(null);
   const [name, setName] = useState<string | null>(null);
@@ -128,6 +130,20 @@ export function DeviceDetailPage() {
       await invalidate();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Could not revoke credential.");
+    }
+  }
+
+  async function onDelete() {
+    if (!window.confirm(`Delete device "${device.name}"? This cannot be undone.`)) {
+      return;
+    }
+    setError(null);
+    try {
+      await deleteDevice(token!, organizationId, deviceId);
+      await queryClient.invalidateQueries({ queryKey: ["devices", organizationId] });
+      navigate(`/organizations/${organizationId}/devices`);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Could not delete the device.");
     }
   }
 
@@ -239,6 +255,9 @@ export function DeviceDetailPage() {
                 Revoke credential
               </Button>
             )}
+            <Button variant="ghost" className="text-red-700" onClick={onDelete}>
+              Delete device
+            </Button>
           </div>
         </div>
       )}

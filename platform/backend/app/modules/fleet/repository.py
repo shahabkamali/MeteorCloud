@@ -214,6 +214,10 @@ class DeviceRepository:
         self.session.flush()
         return device
 
+    def delete(self, device: Device) -> None:
+        self.session.delete(device)
+        self.session.flush()
+
     def _base_query(
         self,
         *,

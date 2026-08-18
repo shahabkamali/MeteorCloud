@@ -356,6 +356,18 @@ def update_device(
     )
 
 
+@router.delete("/devices/{device_id}", status_code=204)
+def delete_device(
+    organization_id: uuid.UUID,
+    device_id: uuid.UUID,
+    current_user: CurrentUser,
+    service: FleetSvc,
+) -> None:
+    service.delete_device(
+        actor=current_user, organization_id=organization_id, device_id=device_id
+    )
+
+
 @router.post("/devices/{device_id}/enable", response_model=DeviceResponse)
 def enable_device(
     organization_id: uuid.UUID,

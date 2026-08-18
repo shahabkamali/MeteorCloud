@@ -90,3 +90,14 @@ export function revokeDeviceCredential(
     { method: "POST", token },
   );
 }
+
+export function deleteDevice(
+  token: string,
+  organizationId: string,
+  deviceId: string,
+): Promise<void> {
+  return apiRequest<void>(
+    `/api/v1/organizations/${organizationId}/devices/${deviceId}`,
+    { method: "DELETE", token },
+  );
+}

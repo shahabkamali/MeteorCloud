@@ -61,7 +61,7 @@ install-agent: ## Install reference agent Python dependencies
 
 install: install-backend install-frontend install-installer install-agent ## Install all local dependencies
 
-backend-test: ## Run backend tests
+backend-test: ## Run backend tests (dedicated *_test database, never the app DB)
 	cd $(BACKEND_DIR) && python -m pytest -q
 
 frontend-test: ## Run frontend tests

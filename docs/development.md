@@ -88,6 +88,12 @@ Runs:
 2. Backend Pytest suite (requires PostgreSQL; use `make dev` first)
 3. Frontend Vitest suite
 
+Backend tests **never** use `DATABASE_URL` / `edge_platform`. They rewrite the
+connection to a sibling `edge_platform_test` database and refuse to start if
+that rewrite would target a non-local host. `make dev` keeps using
+`edge_platform`, so registering a device and then running tests will not wipe
+your development data.
+
 ## Migrations and seed data
 
 ```bash
@@ -110,7 +116,8 @@ Copy `.env.example` to `.env` and adjust as needed. Important values:
 
 | Variable | Purpose |
 | --- | --- |
-| `DATABASE_URL` | SQLAlchemy connection string |
+| `DATABASE_URL` | SQLAlchemy connection string for the running app |
+| `TEST_DATABASE_URL` | Optional pytest database (must end in `_test`) |
 | `JWT_SECRET_KEY` | Signing key for JWT utilities |
 | `BACKEND_CORS_ORIGINS` | Allowed browser origins |
 | `VITE_API_BASE_URL` | Frontend → backend base URL |

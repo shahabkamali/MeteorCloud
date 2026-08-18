@@ -4,6 +4,7 @@ import { Link, useParams } from "react-router-dom";
 
 import {
   createRegistrationToken,
+  deleteDevice,
   listDeviceGroups,
   listDeviceTypes,
   listDevices,
@@ -167,6 +168,19 @@ export function DevicesPage() {
       await invalidateTokens();
     } catch (err) {
       setFormError(err instanceof ApiError ? err.message : "Could not cancel the registration.");
+    }
+  }
+
+  async function onDeleteDevice(deviceId: string, deviceName: string) {
+    if (!window.confirm(`Delete device "${deviceName}"? This cannot be undone.`)) {
+      return;
+    }
+    setFormError(null);
+    try {
+      await deleteDevice(token!, organizationId, deviceId);
+      await queryClient.invalidateQueries({ queryKey: ["devices", organizationId] });
+    } catch (err) {
+      setFormError(err instanceof ApiError ? err.message : "Could not delete the device.");
     }
   }
 
@@ -403,12 +417,16 @@ export function DevicesPage() {
                 </button>
               </th>
               <th className="px-4 py-3 font-semibold">Enabled</th>
+              {canManage && <th className="px-4 py-3 font-semibold">Actions</th>}
             </tr>
           </thead>
           <tbody>
             {devicesQuery.isLoading && (
               <tr>
-                <td className="px-4 py-6 text-center text-muted-foreground" colSpan={5}>
+                <td
+                  className="px-4 py-6 text-center text-muted-foreground"
+                  colSpan={canManage ? 6 : 5}
+                >
                   Loading devices…
                 </td>
               </tr>
@@ -436,11 +454,26 @@ export function DevicesPage() {
                       : "Never"}
                   </td>
                   <td className="px-4 py-3">{device.is_enabled ? "Yes" : "No"}</td>
+                  {canManage && (
+                    <td className="px-4 py-3">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="text-red-700"
+                        onClick={() => onDeleteDevice(device.id, device.name)}
+                      >
+                        Delete
+                      </Button>
+                    </td>
+                  )}
                 </tr>
               ))}
             {!devicesQuery.isLoading && (devicesQuery.data?.items ?? []).length === 0 && (
               <tr>
-                <td className="px-4 py-6 text-center text-muted-foreground" colSpan={5}>
+                <td
+                  className="px-4 py-6 text-center text-muted-foreground"
+                  colSpan={canManage ? 6 : 5}
+                >
                   No devices found.
                 </td>
               </tr>

@@ -19,18 +19,18 @@ jobs:
         working-directory: platform/backend
     env:
       # Matches the Postgres service below; the app otherwise reads .env (absent in CI).
-      DATABASE_URL: postgresql+psycopg://edge:edge@localhost:5432/edge_platform
+      DATABASE_URL: postgresql+psycopg://edge:edge@localhost:5432/edge_platform_test
     services:
       postgres:
         image: postgres:16-alpine
         env:
           POSTGRES_USER: edge
           POSTGRES_PASSWORD: edge
-          POSTGRES_DB: edge_platform
+          POSTGRES_DB: edge_platform_test
         ports:
           - 5432:5432
         options: >-
-          --health-cmd "pg_isready -U edge -d edge_platform"
+          --health-cmd "pg_isready -U edge -d edge_platform_test"
           --health-interval 10s
           --health-timeout 5s
           --health-retries 10

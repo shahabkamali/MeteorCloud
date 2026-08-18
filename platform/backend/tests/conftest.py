@@ -28,15 +28,23 @@ from app.modules.identity import models as _identity_models  # noqa: F401
 from app.modules.identity.models import User
 from app.modules.organizations import models as _organization_models  # noqa: F401
 from app.modules.organizations.models import Organization, OrganizationMembership, OrganizationRole
+from tests.db_guard import assert_safe_test_database_url, ensure_database_exists
 
 
 @pytest.fixture(scope="session")
 def engine():
     settings = get_settings()
+    assert_safe_test_database_url(settings.database_url)
+    ensure_database_exists(settings.database_url)
     eng = create_engine(settings.database_url, pool_pre_ping=True)
     Base.metadata.create_all(bind=eng)
     yield eng
     eng.dispose()
+
+
+def pytest_report_header() -> list[str]:
+    database = get_settings().database_url.rsplit("/", 1)[-1]
+    return [f"test database: {database}"]
 
 
 @pytest.fixture

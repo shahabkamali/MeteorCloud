@@ -632,6 +632,19 @@ class FleetService:
         self.session.refresh(device)
         return self._to_device_response(device)
 
+    def delete_device(
+        self,
+        *,
+        actor: User,
+        organization_id: uuid.UUID,
+        device_id: uuid.UUID,
+    ) -> None:
+        membership = self._require_membership(organization_id, actor.id)
+        self._require_manage(membership.role)
+        device = self._require_device(organization_id, device_id)
+        self.devices.delete(device)
+        self.session.commit()
+
     def set_device_enabled(
         self,
         *,

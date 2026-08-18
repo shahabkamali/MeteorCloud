@@ -296,8 +296,6 @@ class AgentHeartbeatResponse(BaseModel):
 # --------------------------------------------------------------------------- #
 class EnrollmentApiKeyCreateRequest(BaseModel):
     name: str = Field(min_length=1, max_length=120)
-    device_type_id: uuid.UUID | None = None
-    device_group_id: uuid.UUID | None = None
     expires_at: datetime | None = None
 
     @field_validator("name")
@@ -318,8 +316,6 @@ class EnrollmentApiKeyResponse(BaseModel):
     organization_id: uuid.UUID
     name: str
     key_prefix: str
-    device_type_id: uuid.UUID | None
-    device_group_id: uuid.UUID | None
     expires_at: datetime | None
     revoked_at: datetime | None
     last_used_at: datetime | None

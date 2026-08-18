@@ -310,8 +310,6 @@ describe("API keys", () => {
       organization_id: "org-1",
       name: "Field techs",
       key_prefix: "key_abcdef01",
-      device_type_id: null,
-      device_group_id: null,
       expires_at: null,
       revoked_at: null,
       last_used_at: null,
@@ -328,8 +326,6 @@ describe("API keys", () => {
     await waitFor(() => {
       expect(fleetApi.createEnrollmentKey).toHaveBeenCalledWith("token-123", "org-1", {
         name: "Field techs",
-        device_type_id: undefined,
-        device_group_id: undefined,
       });
     });
 

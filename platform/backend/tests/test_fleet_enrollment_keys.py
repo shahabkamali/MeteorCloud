@@ -27,6 +27,8 @@ def test_create_enrollment_key_returns_plaintext_once(
     body = created.json()
     assert body["api_key"].startswith("key_")
     assert body["key_prefix"] == body["api_key"][:12]
+    assert "device_type_id" not in body
+    assert "device_group_id" not in body
 
     listed = client.get(f"/api/v1/organizations/{org.id}/enrollment-keys", headers=headers)
     assert listed.status_code == 200

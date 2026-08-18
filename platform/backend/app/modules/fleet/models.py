@@ -254,18 +254,6 @@ class EnrollmentApiKey(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     key_hash: Mapped[str] = mapped_column(String(64), nullable=False)
     key_prefix: Mapped[str] = mapped_column(String(32), nullable=False)
 
-    # Optional defaults applied to devices enrolled with this key.
-    device_type_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True),
-        ForeignKey("device_types.id", ondelete="RESTRICT"),
-        nullable=True,
-    )
-    device_group_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True),
-        ForeignKey("device_groups.id", ondelete="RESTRICT"),
-        nullable=True,
-    )
-
     expires_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True),
         nullable=True,

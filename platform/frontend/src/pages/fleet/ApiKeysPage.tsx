@@ -38,8 +38,6 @@ export function ApiKeysPage() {
   const queryClient = useQueryClient();
 
   const [keyName, setKeyName] = useState("");
-  const [keyTypeId, setKeyTypeId] = useState("");
-  const [keyGroupId, setKeyGroupId] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [createdKey, setCreatedKey] = useState<EnrollmentApiKeyWithSecret | null>(null);
 
@@ -76,17 +74,6 @@ export function ApiKeysPage() {
 
   const canManage = canManageFleet(orgQuery.data?.current_user_role);
 
-  const typeNames = useMemo(() => {
-    const map = new Map<string, string>();
-    (typesQuery.data ?? []).forEach((type) => map.set(type.id, type.name));
-    return map;
-  }, [typesQuery.data]);
-  const groupNames = useMemo(() => {
-    const map = new Map<string, string>();
-    (groupsQuery.data ?? []).forEach((group) => map.set(group.id, group.name));
-    return map;
-  }, [groupsQuery.data]);
-
   const pendingRequests = useMemo(
     () => (requestsQuery.data ?? []).filter((entry) => entry.status === "pending"),
     [requestsQuery.data],
@@ -96,14 +83,10 @@ export function ApiKeysPage() {
     mutationFn: () =>
       createEnrollmentKey(token!, organizationId, {
         name: keyName,
-        device_type_id: keyTypeId || undefined,
-        device_group_id: keyGroupId || undefined,
       }),
     onSuccess: async (created) => {
       setCreatedKey(created);
       setKeyName("");
-      setKeyTypeId("");
-      setKeyGroupId("");
       setError(null);
       await queryClient.invalidateQueries({ queryKey: ["enrollment-keys", organizationId] });
     },
@@ -321,38 +304,6 @@ export function ApiKeysPage() {
               required
             />
           </div>
-          <div>
-            <Label htmlFor="key-type">Default device type</Label>
-            <select
-              id="key-type"
-              className="flex h-10 w-full rounded-md border border-input bg-white px-3 text-sm"
-              value={keyTypeId}
-              onChange={(event) => setKeyTypeId(event.target.value)}
-            >
-              <option value="">None</option>
-              {(typesQuery.data ?? []).map((type) => (
-                <option key={type.id} value={type.id}>
-                  {type.name}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <Label htmlFor="key-group">Default device group</Label>
-            <select
-              id="key-group"
-              className="flex h-10 w-full rounded-md border border-input bg-white px-3 text-sm"
-              value={keyGroupId}
-              onChange={(event) => setKeyGroupId(event.target.value)}
-            >
-              <option value="">None</option>
-              {(groupsQuery.data ?? []).map((group) => (
-                <option key={group.id} value={group.id}>
-                  {group.name}
-                </option>
-              ))}
-            </select>
-          </div>
           <div className="flex items-end">
             <Button type="submit" disabled={createMutation.isPending}>
               Create API key
@@ -367,8 +318,6 @@ export function ApiKeysPage() {
             <tr>
               <th className="px-4 py-3 font-semibold">Name</th>
               <th className="px-4 py-3 font-semibold">Prefix</th>
-              <th className="px-4 py-3 font-semibold">Type</th>
-              <th className="px-4 py-3 font-semibold">Group</th>
               <th className="px-4 py-3 font-semibold">Status</th>
               {canManage && <th className="px-4 py-3 font-semibold">Actions</th>}
             </tr>
@@ -378,12 +327,6 @@ export function ApiKeysPage() {
               <tr key={entry.id} className="border-b border-border/70">
                 <td className="px-4 py-3 font-medium">{entry.name}</td>
                 <td className="px-4 py-3 font-mono text-xs">{entry.key_prefix}…</td>
-                <td className="px-4 py-3 text-muted-foreground">
-                  {entry.device_type_id ? (typeNames.get(entry.device_type_id) ?? "—") : "—"}
-                </td>
-                <td className="px-4 py-3 text-muted-foreground">
-                  {entry.device_group_id ? (groupNames.get(entry.device_group_id) ?? "—") : "—"}
-                </td>
                 <td className="px-4 py-3">{entry.revoked_at ? "Revoked" : "Active"}</td>
                 {canManage && (
                   <td className="px-4 py-3">
@@ -398,7 +341,7 @@ export function ApiKeysPage() {
             ))}
             {(keysQuery.data ?? []).length === 0 && (
               <tr>
-                <td className="px-4 py-6 text-center text-muted-foreground" colSpan={6}>
+                <td className="px-4 py-6 text-center text-muted-foreground" colSpan={4}>
                   No API keys yet.
                 </td>
               </tr>

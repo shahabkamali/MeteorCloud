@@ -99,8 +99,6 @@ export type EnrollmentApiKey = {
   organization_id: string;
   name: string;
   key_prefix: string;
-  device_type_id: string | null;
-  device_group_id: string | null;
   expires_at: string | null;
   revoked_at: string | null;
   last_used_at: string | null;

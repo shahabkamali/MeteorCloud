@@ -85,8 +85,6 @@ class EnrollmentService:
             claim_secret_hash=claim.token_hash,
             claim_secret_prefix=claim.display_prefix,
             requested_name=(payload.name.strip()[:255] if payload.name else None),
-            device_type_id=api_key.device_type_id,
-            device_group_id=api_key.device_group_id,
             machine_id=identity.machine_id,
             serial_number=identity.serial_number,
             mac_addresses=identity.mac_addresses,

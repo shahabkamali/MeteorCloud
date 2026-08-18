@@ -18,9 +18,10 @@ API keys**.
 When creating a key you may set:
 
 - `name` — required label.
-- `device_type_id` / `device_group_id` — optional defaults applied to devices
-  enrolled with this key.
 - `expires_at` — optional expiry (must be in the future).
+
+Device type and group are chosen later, when an admin approves the enrollment
+request.
 
 ## API
 

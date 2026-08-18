@@ -94,6 +94,12 @@ that rewrite would target a non-local host. `make dev` keeps using
 `edge_platform`, so registering a device and then running tests will not wipe
 your development data.
 
+## AWS CI
+
+To run tests, launch a throwaway EC2 install, smoke-check it, and destroy it,
+store `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` as GitHub Actions secrets
+and run the **AWS CI** workflow. See [AWS CI](aws-ci.md).
+
 ## Migrations and seed data
 
 ```bash

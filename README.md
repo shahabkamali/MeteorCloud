@@ -83,6 +83,7 @@ make ansible-check
 | **Configuration** | [docs/installer-configuration.md](docs/installer-configuration.md) |
 | **AWS prerequisites** | [docs/aws-prerequisites.md](docs/aws-prerequisites.md) |
 | **AWS deployment** | [docs/aws-deployment.md](docs/aws-deployment.md) |
+| **AWS CI (throwaway EC2)** | [docs/aws-ci.md](docs/aws-ci.md) |
 | **Upgrades** | [docs/upgrades.md](docs/upgrades.md) |
 | **Destroy** | [docs/destroy.md](docs/destroy.md) |
 | **Troubleshooting** | [docs/troubleshooting.md](docs/troubleshooting.md) |

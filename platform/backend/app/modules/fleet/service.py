@@ -408,10 +408,6 @@ class FleetService:
         membership = self._require_membership(organization_id, actor.id)
         self._require_manage(membership.role)
 
-        if payload.device_type_id is not None:
-            self._require_device_type(organization_id, payload.device_type_id)
-        if payload.device_group_id is not None:
-            self._require_device_group(organization_id, payload.device_group_id)
         if payload.expires_at is not None and payload.expires_at <= datetime.now(UTC):
             raise ConflictError("invalid_expiry", "Expiry must be in the future.")
 
@@ -421,8 +417,6 @@ class FleetService:
             name=payload.name,
             key_hash=generated.token_hash,
             key_prefix=generated.display_prefix,
-            device_type_id=payload.device_type_id,
-            device_group_id=payload.device_group_id,
             expires_at=payload.expires_at,
             created_by_user_id=actor.id,
         )

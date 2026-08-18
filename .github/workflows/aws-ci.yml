@@ -1,0 +1,153 @@
+name: AWS CI
+
+# Optional: store AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY, then run this
+# workflow. It runs tests and infra checks, launches a throwaway EC2 install,
+# smoke-checks it, and always destroys the instance.
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: aws-ci
+  cancel-in-progress: false
+
+jobs:
+  test:
+    name: Tests
+    runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: postgresql+psycopg://edge:edge@localhost:5432/edge_platform_test
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: edge
+          POSTGRES_PASSWORD: edge
+          POSTGRES_DB: edge_platform_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U edge -d edge_platform_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: |
+            platform/backend/pyproject.toml
+            installer/pyproject.toml
+            agent-example/pyproject.toml
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: platform/frontend/package-lock.json
+      - name: Install dependencies
+        run: make install
+      - name: Test
+        run: make test
+
+  checks:
+    name: Infra checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.9.8"
+          terraform_wrapper: false
+      - name: Install Ansible
+        run: python -m pip install ansible
+      - name: Terraform check
+        run: make terraform-check
+      - name: Ansible check
+        run: make ansible-check
+
+  aws-e2e:
+    name: EC2 apply, smoke, destroy
+    needs: [test, checks]
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      AWS_REGION: ${{ vars.AWS_REGION || 'eu-central-1' }}
+      INSTALLATION_NAME: ci-${{ github.run_id }}
+      SSH_KEY_NAME: ci-${{ github.run_id }}
+      CONFIG_PATH: /tmp/installation.ci.yaml
+      SSH_PRIVATE_KEY_PATH: /tmp/ci-edge.pem
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: installer/pyproject.toml
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.9.8"
+          terraform_wrapper: false
+      - name: Install installer and Ansible
+        run: |
+          python -m pip install -e "installer/.[dev]"
+          python -m pip install ansible
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+      - name: Generate ephemeral platform secrets
+        run: |
+          echo "EDGE_PLATFORM_POSTGRES_PASSWORD=$(openssl rand -hex 16)" >> "$GITHUB_ENV"
+          echo "EDGE_PLATFORM_JWT_SECRET=$(openssl rand -hex 32)" >> "$GITHUB_ENV"
+      - name: Create ephemeral SSH key
+        run: |
+          ssh-keygen -t ed25519 -f "${SSH_PRIVATE_KEY_PATH}" -N "" -q
+          chmod 600 "${SSH_PRIVATE_KEY_PATH}"
+          aws ec2 import-key-pair \
+            --key-name "${SSH_KEY_NAME}" \
+            --public-key-material "fileb://${SSH_PRIVATE_KEY_PATH}.pub"
+      - name: Write CI installation config
+        run: |
+          RUNNER_IP="$(curl -fsS https://api.ipify.org)"
+          sed \
+            -e "s#__INSTALLATION_NAME__#${INSTALLATION_NAME}#g" \
+            -e "s#__AWS_REGION__#${AWS_REGION}#g" \
+            -e "s#__SSH_KEY_NAME__#${SSH_KEY_NAME}#g" \
+            -e "s#__SSH_PRIVATE_KEY_PATH__#${SSH_PRIVATE_KEY_PATH}#g" \
+            -e "s#__SSH_CIDR__#${RUNNER_IP}/32#g" \
+            -e "s#__REPOSITORY_URL__#https://github.com/${{ github.repository }}.git#g" \
+            -e "s#__GIT_REF__#${{ github.sha }}#g" \
+            installer/edge_installer/config/examples/installation.ci.yaml \
+            > "${CONFIG_PATH}"
+      - name: Apply throwaway EC2 install
+        run: |
+          edge-installer validate "${CONFIG_PATH}"
+          edge-installer apply "${CONFIG_PATH}"
+      - name: Extra smoke checks
+        run: |
+          chmod +x scripts/aws-ci-smoke.sh
+          edge-installer status "${CONFIG_PATH}"
+          URL="$(python -c "
+          import json
+          from pathlib import Path
+          path = Path('.installer-state') / '${INSTALLATION_NAME}' / 'installation.json'
+          data = json.loads(path.read_text())
+          url = data.get('platform_url')
+          if not url:
+              raise SystemExit(f'missing platform_url in {path}')
+          print(url)
+          ")"
+          scripts/aws-ci-smoke.sh "${URL}"
+      - name: Destroy EC2 install
+        if: always()
+        run: |
+          if [[ -d ".installer-state/${INSTALLATION_NAME}/terraform" ]]; then
+            edge-installer destroy "${CONFIG_PATH}" --yes
+          fi
+          aws ec2 delete-key-pair --key-name "${SSH_KEY_NAME}" || true

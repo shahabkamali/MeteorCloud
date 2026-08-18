@@ -3,8 +3,6 @@ import type { EnrollmentApiKey, EnrollmentApiKeyWithSecret } from "@/api/fleet/t
 
 export type EnrollmentApiKeyPayload = {
   name: string;
-  device_type_id?: string | null;
-  device_group_id?: string | null;
   expires_at?: string | null;
 };
 

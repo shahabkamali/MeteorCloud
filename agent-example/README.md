@@ -1,9 +1,14 @@
-# Edge Agent (reference)
+# meteor (device agent)
 
-A small, dependency-free reference agent that registers a Linux device with the
-Edge Platform control plane and sends periodic heartbeats. It uses only the
-Python standard library so it runs on minimal devices, and it is intentionally
-simple to serve as a starting point for a production agent in any language.
+`meteor` is the MeteorCloud device command. It runs on managed Linux devices,
+registers them with the control plane using a registration token, and sends
+periodic heartbeats. It uses only the Python standard library so it runs on
+minimal devices, and it is intentionally simple to serve as a starting point
+for a production agent in any language.
+
+It is structured like a normal Linux tool: a top-level command with
+subcommands, `--help` at every level, `--version`, and environment-variable
+fallbacks for scripting.
 
 ## Install
 
@@ -12,42 +17,69 @@ cd agent-example
 python -m pip install -e ".[dev]"
 ```
 
-This installs the `edge-agent` command.
+This installs the `meteor` command (the `edge-agent` alias remains available for
+the reference internals).
+
+## Usage
+
+```bash
+meteor --help              # top-level help and examples
+meteor <command> --help    # help for a specific command
+meteor --version
+```
+
+| Command    | Purpose                                        |
+| ---------- | ---------------------------------------------- |
+| `register` | Enroll this device with a registration token.  |
+| `run`      | Send heartbeats (loop, or `--once`).           |
+| `status`   | Show persisted, non-secret configuration.      |
+
+Environment variables: `METEOR_SERVER`, `METEOR_TOKEN`, `METEOR_CONFIG_DIR`
+(default config directory: `/etc/meteor`).
 
 ## Register a device
 
-Create a registration token in the dashboard (Fleet → Registration tokens). The
+Create a token in the dashboard (**Fleet → Devices → Add device**). The
 plaintext token is shown **once**. Prefer passing it via a file so it does not
 appear in shell history or the process list:
 
 ```bash
-printf '%s' "reg_..." > /etc/edge-agent/registration-token
-sudo edge-agent register \
-  --server https://platform.example.com \
-  --token-file /etc/edge-agent/registration-token \
+printf '%s' "reg_..." > /run/meteor.token
+sudo meteor register \
+  --server https://cloud.example.com \
+  --token-file /run/meteor.token \
   --name edge-01
 ```
 
 Or pass it inline (less secure):
 
 ```bash
-sudo edge-agent register --server https://platform.example.com --token reg_...
+sudo meteor register --server https://cloud.example.com --token reg_...
 ```
 
-On success the agent:
+You can also rely on environment variables:
+
+```bash
+export METEOR_SERVER=https://cloud.example.com
+export METEOR_TOKEN=reg_...
+sudo -E meteor register
+```
+
+On success the command:
 
 - collects best-effort inventory (machine ID, serial, MAC addresses, OS, CPU,
   memory), tolerating anything that is unavailable;
-- stores the device credential atomically at `/etc/edge-agent/device-token`
-  with `0600` permissions;
-- writes non-secret configuration to `/etc/edge-agent/config.json`;
+- stores the device credential atomically at `/etc/meteor/device-token` with
+  `0600` permissions;
+- writes non-secret configuration to `/etc/meteor/config.json`;
 - removes the registration-token file (only after a successful registration).
 
 ## Send heartbeats
 
 ```bash
-edge-agent run           # loop forever using the configured interval
-edge-agent run --once    # send a single heartbeat and exit
+meteor run                 # loop forever using the configured interval
+meteor run --once          # send a single heartbeat and exit
+meteor run --interval 30   # override the interval (seconds)
 ```
 
 The loop uses bounded exponential backoff on transient errors and stops if the
@@ -56,7 +88,7 @@ credential is rejected (so the device can be re-registered).
 ## Inspect configuration
 
 ```bash
-edge-agent info
+meteor status
 ```
 
 Shows the server, device ID, organization, name, heartbeat interval, and whether
@@ -69,7 +101,7 @@ python -m pytest -q
 ```
 
 Paths are injectable via `--config-dir`, so tests and local runs never touch the
-real `/etc/edge-agent` location.
+real `/etc/meteor` location.
 
 ## Notes
 

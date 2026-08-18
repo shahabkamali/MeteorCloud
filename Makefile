@@ -106,7 +106,7 @@ typecheck: ## Run static type checks where configured
 	@echo "==> Installer typecheck (compileall)"
 	cd $(INSTALLER_DIR) && python -m compileall edge_installer tests
 	@echo "==> Agent typecheck (compileall)"
-	cd $(AGENT_DIR) && python -m compileall edge_agent tests
+	cd $(AGENT_DIR) && python -m compileall meteor edge_agent tests
 
 installer-test: ## Run installer tests only
 	cd $(INSTALLER_DIR) && python -m pytest -q

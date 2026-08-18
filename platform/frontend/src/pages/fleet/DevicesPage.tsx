@@ -28,7 +28,7 @@ const PAGE_SIZE = 10;
 
 function buildRegisterCommand(serverOrigin: string, token: string): string {
   return [
-    "sudo edge-agent register \\",
+    "sudo meteor register \\",
     `  --server ${serverOrigin} \\`,
     `  --token ${token}`,
   ].join("\n");

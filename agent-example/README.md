@@ -16,14 +16,19 @@ There are **two ways** to enroll a device:
 On a Linux device, from this directory:
 
 ```bash
-sudo ./installcli.sh
+./installcli.sh          # current user (~/.local)
+sudo ./installcli.sh     # system-wide
 meteorcli --help
 ```
 
-That creates a virtualenv in `/opt/meteorcli`, puts `meteorcli` on `PATH` via
-`/usr/local/bin`, and creates `/etc/meteorcli`. Re-run the script to upgrade.
-Uninstall with `sudo ./installcli.sh --uninstall` (credentials in
-`/etc/meteorcli` are kept).
+A user install puts the venv in `~/.local/share/meteorcli` and the command in
+`~/.local/bin`. A system install uses `/opt/meteorcli` and `/usr/local/bin`.
+Re-run the script to upgrade. Uninstall with `./installcli.sh --uninstall`
+(credentials are kept).
+
+Config and credentials go in `~/.config/meteorcli` for a normal user, or
+`/etc/meteorcli` when running as root. You do not need root to run
+`meteorcli config`, `test`, or `request` as your own user.
 
 For local development:
 
@@ -51,7 +56,8 @@ meteorcli --version
 | `status`   | Show persisted, non-secret configuration.                        |
 
 Environment variables: `METEORCLI_DOMAIN`, `METEORCLI_SERVER`, `METEORCLI_API_KEY`,
-`METEORCLI_TOKEN`, `METEORCLI_CONFIG_DIR` (default: `/etc/meteorcli`).
+`METEORCLI_TOKEN`, `METEORCLI_CONFIG_DIR` (default: `~/.config/meteorcli`, or
+`/etc/meteorcli` as root).
 
 The value you pass to `--domain` is the API host. There is no `api.` subdomain.
 `meteorxx.com` becomes `https://meteorxx.com`. An IP or localhost uses HTTP on
@@ -61,29 +67,29 @@ name, or `--api-base` / `METEORCLI_SERVER` to set the origin explicitly.
 ## Configure the CLI
 
 ```bash
-sudo meteorcli config --domain meteorxx.com --api-key key_...
-sudo meteorcli test
+meteorcli config --domain meteorxx.com --api-key key_...
+meteorcli test
 meteorcli config --show
 ```
 
 Local / HTTP testing:
 
 ```bash
-sudo meteorcli config --domain 192.168.0.107:8000 --api-key key_...
-sudo meteorcli test
-# or: sudo meteorcli config --api-base http://192.168.0.107:8000 --api-key key_...
+meteorcli config --domain 192.168.0.107:8000 --api-key key_...
+meteorcli test
+# or: meteorcli config --api-base http://192.168.0.107:8000 --api-key key_...
 ```
 
-The API key is stored at `/etc/meteorcli/api-key` with `0600` permissions and is
-never printed by `status` or `--show`.
+The API key is stored at `~/.config/meteorcli/api-key` (or `/etc/meteorcli/api-key`
+as root) with `0600` permissions and is never printed by `status` or `--show`.
 
 ## Path 1 — register with a token
 
 Create a token in the dashboard (**Devices → Add device**). Prefer a token file:
 
 ```bash
-printf '%s' "reg_..." > /run/meteorcli.token
-sudo meteorcli register --token-file /run/meteorcli.token --name edge-01
+printf '%s' "reg_..." > /tmp/meteorcli.token
+meteorcli register --token-file /tmp/meteorcli.token --name edge-01
 ```
 
 Or pass `--server` / `--token` explicitly if the CLI is not yet configured.
@@ -91,7 +97,7 @@ Or pass `--server` / `--token` explicitly if the CLI is not yet configured.
 ## Path 2 — request enrollment
 
 ```bash
-sudo meteorcli request --name edge-01
+meteorcli request --name edge-01
 ```
 
 The command submits inventory, then polls until an administrator approves or

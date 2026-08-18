@@ -3,12 +3,24 @@
 from __future__ import annotations
 
 import ipaddress
+import os
 from dataclasses import dataclass
 from pathlib import Path
 
 from edge_agent.config import AgentConfig, AgentPaths, load_config, save_config
 
-DEFAULT_CONFIG_DIR = Path("/etc/meteorcli")
+SYSTEM_CONFIG_DIR = Path("/etc/meteorcli")
+
+
+def default_config_dir() -> Path:
+    """System dir as root, otherwise the calling user's config directory."""
+    geteuid = getattr(os, "geteuid", None)
+    if geteuid is not None and geteuid() == 0:
+        return SYSTEM_CONFIG_DIR
+    xdg = os.environ.get("XDG_CONFIG_HOME")
+    if xdg:
+        return Path(xdg) / "meteorcli"
+    return Path.home() / ".config" / "meteorcli"
 
 
 @dataclass

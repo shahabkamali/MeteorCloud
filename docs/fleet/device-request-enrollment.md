@@ -86,8 +86,8 @@ Reject body (optional): `{ "reason" }`. Mutation requires **owner** or **admin**
 ## Using meteorcli
 
 ```bash
-sudo meteorcli config --domain meteorxx.com --api-key key_...
-sudo meteorcli test
-sudo meteorcli request --name edge-01
-sudo meteorcli run
+meteorcli config --domain meteorxx.com --api-key key_...
+meteorcli test
+meteorcli request --name edge-01
+meteorcli run
 ```

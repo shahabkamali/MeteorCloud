@@ -1,16 +1,20 @@
 #!/usr/bin/env bash
 # Install meteorcli from this directory onto a Linux device.
 #
-#   sudo ./installcli.sh
-#   sudo ./installcli.sh --uninstall
-#
-# Override locations with --prefix / --bin-dir, or PREFIX / BIN_DIR.
+#   ./installcli.sh              Install for the current user (~/.local)
+#   sudo ./installcli.sh         System-wide (/opt + /usr/local/bin)
+#   ./installcli.sh --uninstall  Remove the install (keeps credentials)
 
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PREFIX="${PREFIX:-/opt/meteorcli}"
-BIN_DIR="${BIN_DIR:-/usr/local/bin}"
+SYSTEM_PREFIX="/opt/meteorcli"
+SYSTEM_BIN="/usr/local/bin"
+USER_PREFIX="${XDG_DATA_HOME:-$HOME/.local/share}/meteorcli"
+USER_BIN="${HOME}/.local/bin"
+
+PREFIX="${PREFIX:-}"
+BIN_DIR="${BIN_DIR:-}"
 UNINSTALL=0
 
 usage() {
@@ -18,13 +22,13 @@ usage() {
 Install meteorcli from ${SCRIPT_DIR}
 
 Usage:
-  sudo $0                 Install to ${PREFIX} and ${BIN_DIR}/meteorcli
-  sudo $0 --uninstall     Remove the install (keeps /etc/meteorcli)
-  $0 --prefix DIR         Install the venv elsewhere (no root if DIR is writable)
+  $0                      Install for this user (${USER_PREFIX}, ${USER_BIN})
+  sudo $0                 Install system-wide (${SYSTEM_PREFIX}, ${SYSTEM_BIN})
+  $0 --uninstall          Remove the install (keeps credentials)
 
 Options:
-  --prefix DIR    Virtualenv location (default: ${PREFIX})
-  --bin-dir DIR   Directory for the meteorcli symlink (default: ${BIN_DIR})
+  --prefix DIR    Virtualenv location
+  --bin-dir DIR   Directory for the meteorcli symlink
   --uninstall     Remove the venv and symlink
   -h, --help      Show this help
 EOF
@@ -55,6 +59,21 @@ while [[ $# -gt 0 ]]; do
       ;;
   esac
 done
+
+if [[ -z "${PREFIX}" ]]; then
+  if [[ "${EUID}" -eq 0 ]]; then
+    PREFIX="${SYSTEM_PREFIX}"
+  else
+    PREFIX="${USER_PREFIX}"
+  fi
+fi
+if [[ -z "${BIN_DIR}" ]]; then
+  if [[ "${EUID}" -eq 0 ]]; then
+    BIN_DIR="${SYSTEM_BIN}"
+  else
+    BIN_DIR="${USER_BIN}"
+  fi
+fi
 
 need_writable() {
   local path="$1"
@@ -90,7 +109,11 @@ uninstall() {
     rm -rf "${PREFIX}"
     echo "Removed ${PREFIX}"
   fi
-  echo "Left /etc/meteorcli in place (device credentials)."
+  if [[ "${EUID}" -eq 0 ]]; then
+    echo "Left /etc/meteorcli in place (device credentials)."
+  else
+    echo "Left ${XDG_CONFIG_HOME:-$HOME/.config}/meteorcli in place (device credentials)."
+  fi
 }
 
 install() {
@@ -116,7 +139,7 @@ install() {
   "${PREFIX}/bin/python" -m pip install "${SCRIPT_DIR}"
 
   ln -sfn "${PREFIX}/bin/meteorcli" "${BIN_DIR}/meteorcli"
-  if [[ "${BIN_DIR}" == "/usr/local/bin" ]]; then
+  if [[ "${EUID}" -eq 0 && "${BIN_DIR}" == "${SYSTEM_BIN}" ]]; then
     mkdir -p /etc/meteorcli
     chmod 0755 /etc/meteorcli
   fi
@@ -124,13 +147,16 @@ install() {
   echo
   "${BIN_DIR}/meteorcli" --version
   echo "Installed ${BIN_DIR}/meteorcli"
-  echo "Next: sudo meteorcli config --domain <host> --api-key key_..."
-  echo "      sudo meteorcli test"
+  if [[ "${EUID}" -ne 0 && ":${PATH}:" != *":${BIN_DIR}:"* ]]; then
+    echo "Add ${BIN_DIR} to PATH if meteorcli is not found."
+  fi
+  echo "Next: meteorcli config --domain <host> --api-key key_..."
+  echo "      meteorcli test"
 }
 
 if [[ "${UNINSTALL}" -eq 1 ]]; then
   if ! need_writable "${PREFIX}" || ! need_writable "${BIN_DIR}"; then
-    echo "error: ${PREFIX} or ${BIN_DIR} is not writable; re-run with sudo." >&2
+    echo "error: ${PREFIX} or ${BIN_DIR} is not writable; re-run with sudo for a system install." >&2
     exit 1
   fi
   uninstall
@@ -138,7 +164,7 @@ if [[ "${UNINSTALL}" -eq 1 ]]; then
 fi
 
 if ! need_writable "${PREFIX}" || ! need_writable "${BIN_DIR}"; then
-  echo "error: ${PREFIX} or ${BIN_DIR} is not writable; re-run with sudo." >&2
+  echo "error: ${PREFIX} or ${BIN_DIR} is not writable; re-run with sudo for a system install." >&2
   exit 1
 fi
 

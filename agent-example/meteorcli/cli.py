@@ -31,8 +31,8 @@ from edge_agent.inventory import collect_inventory
 from edge_agent.registration import register
 from meteorcli import __version__
 from meteorcli.config import (
-    DEFAULT_CONFIG_DIR,
     CliPaths,
+    default_config_dir,
     derive_api_base,
     persist_connection,
     resolve_server_url,
@@ -52,8 +52,9 @@ ENV_CONFIG_DIR = "METEORCLI_CONFIG_DIR"
 
 def _paths_from_args(args: argparse.Namespace) -> CliPaths:
     config_dir = args.config_dir or os.environ.get(ENV_CONFIG_DIR)
-    base = Path(config_dir) if config_dir else DEFAULT_CONFIG_DIR
-    return CliPaths.from_dir(base)
+    if config_dir:
+        return CliPaths.from_dir(Path(config_dir).expanduser())
+    return CliPaths.from_dir(default_config_dir())
 
 
 def _load(paths: CliPaths) -> AgentConfig | None:
@@ -411,7 +412,8 @@ def build_parser() -> argparse.ArgumentParser:
             f"  {ENV_SERVER}       Override the API base URL (http:// is allowed).\n"
             f"  {ENV_API_KEY}      API key.\n"
             f"  {ENV_TOKEN}        Registration token (used if --token is omitted).\n"
-            f"  {ENV_CONFIG_DIR}   Config/credential directory (default: /etc/meteorcli).\n"
+            f"  {ENV_CONFIG_DIR}   Config/credential directory "
+            f"(default: /etc/meteorcli as root, ~/.config/meteorcli otherwise).\n"
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
@@ -420,7 +422,10 @@ def build_parser() -> argparse.ArgumentParser:
         "--config-dir",
         default=None,
         metavar="DIR",
-        help="Directory for device config and credentials (default: /etc/meteorcli).",
+        help=(
+            "Directory for device config and credentials "
+            "(default: /etc/meteorcli as root, ~/.config/meteorcli otherwise)."
+        ),
     )
     subparsers = parser.add_subparsers(dest="command", metavar="<command>", required=True)
 

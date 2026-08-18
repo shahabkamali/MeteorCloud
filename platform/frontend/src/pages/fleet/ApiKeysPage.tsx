@@ -26,7 +26,7 @@ import { canManageFleet } from "@/lib/permissions";
 
 function buildConfigCommand(domain: string, apiKey: string): string {
   return [
-    "sudo meteorcli config \\",
+    "meteorcli config \\",
     `  --domain ${domain} \\`,
     `  --api-key ${apiKey}`,
   ].join("\n");

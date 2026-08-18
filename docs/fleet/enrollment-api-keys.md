@@ -35,9 +35,9 @@ Create and revoke require **owner** or **admin**. Any member may list keys.
 ## Using meteorcli
 
 ```bash
-sudo meteorcli config --domain meteorxx.com --api-key key_...
-sudo meteorcli test
-sudo meteorcli request --name edge-01
+meteorcli config --domain meteorxx.com --api-key key_...
+meteorcli test
+meteorcli request --name edge-01
 ```
 
 See [device-request-enrollment.md](device-request-enrollment.md).

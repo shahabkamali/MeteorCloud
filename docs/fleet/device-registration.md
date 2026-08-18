@@ -79,10 +79,10 @@ registration. Always use HTTPS in production.
 ## Using the reference agent
 
 ```bash
-printf '%s' "reg_..." > /run/meteorcli.token
-sudo meteorcli register \
+printf '%s' "reg_..." > /tmp/meteorcli.token
+meteorcli register \
   --server https://platform.example.com \
-  --token-file /run/meteorcli.token \
+  --token-file /tmp/meteorcli.token \
   --name edge-01
 ```
 

@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
 from edge_agent.client import AgentApiError
 from meteorcli import cli as meteorcli
-from meteorcli.config import derive_api_base
+from meteorcli.config import default_config_dir, derive_api_base
 from tests.conftest import FakeClient
 
 
@@ -22,6 +24,29 @@ def test_derive_api_base() -> None:
     assert derive_api_base("https://api.192.168.0.107") == "http://192.168.0.107"
     assert derive_api_base("https://api.192.168.0.107", http=True) == "http://192.168.0.107"
     assert derive_api_base("localhost:8000") == "http://localhost:8000"
+
+
+def test_default_config_dir_user(monkeypatch, tmp_path) -> None:
+    monkeypatch.setattr("meteorcli.config.os.geteuid", lambda: 1000)
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "xdg"))
+    assert default_config_dir() == tmp_path / "xdg" / "meteorcli"
+
+
+def test_default_config_dir_root(monkeypatch) -> None:
+    monkeypatch.setattr("meteorcli.config.os.geteuid", lambda: 0)
+    assert default_config_dir() == Path("/etc/meteorcli")
+
+
+def test_user_config_writes_without_root(tmp_path, monkeypatch, capsys) -> None:
+    monkeypatch.setattr("meteorcli.config.os.geteuid", lambda: 1000)
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "xdg"))
+    code = meteorcli.main(
+        ["config", "--domain", "192.168.0.107:8000", "--api-key", "key_secret"]
+    )
+    assert code == 0
+    saved = tmp_path / "xdg" / "meteorcli"
+    assert (saved / "api-key").read_text(encoding="utf-8") == "key_secret"
+    assert "xdg" in capsys.readouterr().out
 
 
 def test_config_and_show(tmp_path, capsys) -> None:

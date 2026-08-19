@@ -77,6 +77,89 @@ services:
     networks:
       - platform
 
+{% if (observability_enabled | default('false')) | bool %}
+  node-exporter:
+    image: prom/node-exporter:v1.8.2
+    pid: host
+    command:
+      - "--path.procfs=/host/proc"
+      - "--path.sysfs=/host/sys"
+      - "--path.rootfs=/host/root"
+      - "--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)"
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/host/root:ro
+    networks:
+      - platform
+
+  prometheus:
+    image: prom/prometheus:v2.55.1
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.retention.time=15d"
+    volumes:
+      - /opt/edge-platform/src/platform/observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - /opt/edge-platform/data/prometheus:/prometheus
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - platform
+
+  loki:
+    image: grafana/loki:3.3.2
+    command: ["-config.file=/etc/loki/loki.yml"]
+    volumes:
+      - /opt/edge-platform/src/platform/observability/loki.yml:/etc/loki/loki.yml:ro
+    networks:
+      - platform
+
+  docker-socket-proxy:
+    image: tecnativa/docker-socket-proxy:0.3.0
+    environment:
+      CONTAINERS: 1
+      POST: 0
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - docker_proxy
+
+  alloy:
+    image: grafana/alloy:v1.8.3
+    command:
+      - run
+      - /etc/alloy/config.alloy
+      - --storage.path=/var/lib/alloy/data
+    volumes:
+      - /opt/edge-platform/src/platform/observability/config.alloy:/etc/alloy/config.alloy:ro
+    depends_on:
+      - loki
+      - docker-socket-proxy
+    networks:
+      - platform
+      - docker_proxy
+
+  grafana:
+    image: grafana/grafana:11.4.0
+    environment:
+      GF_SECURITY_ADMIN_USER: {{ grafana_admin_user }}
+      GF_SECURITY_ADMIN_PASSWORD: {{ grafana_admin_password }}
+    volumes:
+      - /opt/edge-platform/src/platform/observability/grafana/provisioning:/etc/grafana/provisioning:ro
+    ports:
+      - "127.0.0.1:3001:3000"
+    depends_on:
+      - prometheus
+      - loki
+    networks:
+      - platform
+{% endif %}
+
 networks:
   platform:
     driver: bridge
+{% if (observability_enabled | default('false')) | bool %}
+  docker_proxy:
+    internal: true
+{% endif %}

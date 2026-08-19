@@ -120,7 +120,6 @@ def test_validate_rejects_unimplemented_cloudwatch(
 
     assert any("cloudwatch is not implemented" in item for item in errors)
 
-
 def test_validate_allows_disabled_cloudwatch(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

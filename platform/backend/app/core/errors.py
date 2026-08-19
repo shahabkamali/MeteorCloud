@@ -7,6 +7,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
 from app.core.exceptions import AppError
+from app.core.request_id import unhandled_error_response
 
 
 def register_exception_handlers(app: FastAPI) -> None:
@@ -36,3 +37,7 @@ def register_exception_handlers(app: FastAPI) -> None:
                 }
             },
         )
+
+    @app.exception_handler(Exception)
+    async def unhandled_error_handler(request: Request, exc: Exception) -> JSONResponse:
+        return unhandled_error_response(getattr(request.state, "request_id", None))

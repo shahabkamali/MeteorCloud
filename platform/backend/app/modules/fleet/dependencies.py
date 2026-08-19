@@ -6,6 +6,7 @@ from datetime import UTC, datetime
 from functools import lru_cache
 from typing import Annotated
 
+import redis
 from fastapi import Depends, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
@@ -15,11 +16,7 @@ from app.core.database import get_db
 from app.core.exceptions import AppError, UnauthorizedError
 from app.modules.fleet.enrollment import EnrollmentService
 from app.modules.fleet.models import Device, EnrollmentApiKey
-from app.modules.fleet.rate_limit import (
-    InMemoryRateLimiter,
-    RateLimiter,
-    RedisRateLimiter,
-)
+from app.modules.fleet.rate_limit import RateLimiter, RedisRateLimiter
 from app.modules.fleet.registration import RegistrationService
 from app.modules.fleet.repository import DeviceRepository, EnrollmentApiKeyRepository
 from app.modules.fleet.service import FleetService
@@ -59,24 +56,23 @@ def get_enrollment_service(
     return EnrollmentService(session, settings=settings)
 
 
+def _redis_rate_limiter(*, limit: int, window_seconds: int, prefix: str = "reg_rl") -> RateLimiter:
+    client = redis.Redis.from_url(get_settings().redis_url)
+    return RedisRateLimiter(
+        client,
+        limit=limit,
+        window_seconds=window_seconds,
+        prefix=prefix,
+    )
+
+
 @lru_cache
 def _build_rate_limiter() -> RateLimiter:
     settings = get_settings()
-    try:
-        import redis  # type: ignore[import-not-found]
-
-        client = redis.Redis.from_url(settings.redis_url)
-        return RedisRateLimiter(
-            client,
-            limit=settings.registration_rate_limit_requests,
-            window_seconds=settings.registration_rate_limit_window_seconds,
-        )
-    except Exception:
-        # Redis client library unavailable; use an in-process limiter instead.
-        return InMemoryRateLimiter(
-            limit=settings.registration_rate_limit_requests,
-            window_seconds=settings.registration_rate_limit_window_seconds,
-        )
+    return _redis_rate_limiter(
+        limit=settings.registration_rate_limit_requests,
+        window_seconds=settings.registration_rate_limit_window_seconds,
+    )
 
 
 def get_rate_limiter() -> RateLimiter:
@@ -95,41 +91,21 @@ def enforce_registration_rate_limit(
 @lru_cache
 def _build_enroll_request_rate_limiter() -> RateLimiter:
     settings = get_settings()
-    try:
-        import redis  # type: ignore[import-not-found]
-
-        client = redis.Redis.from_url(settings.redis_url)
-        return RedisRateLimiter(
-            client,
-            limit=settings.enrollment_request_rate_limit_requests,
-            window_seconds=settings.enrollment_request_rate_limit_window_seconds,
-            prefix="enroll_req_rl",
-        )
-    except Exception:
-        return InMemoryRateLimiter(
-            limit=settings.enrollment_request_rate_limit_requests,
-            window_seconds=settings.enrollment_request_rate_limit_window_seconds,
-        )
+    return _redis_rate_limiter(
+        limit=settings.enrollment_request_rate_limit_requests,
+        window_seconds=settings.enrollment_request_rate_limit_window_seconds,
+        prefix="enroll_req_rl",
+    )
 
 
 @lru_cache
 def _build_enroll_poll_rate_limiter() -> RateLimiter:
     settings = get_settings()
-    try:
-        import redis  # type: ignore[import-not-found]
-
-        client = redis.Redis.from_url(settings.redis_url)
-        return RedisRateLimiter(
-            client,
-            limit=settings.enrollment_poll_rate_limit_requests,
-            window_seconds=settings.enrollment_poll_rate_limit_window_seconds,
-            prefix="enroll_poll_rl",
-        )
-    except Exception:
-        return InMemoryRateLimiter(
-            limit=settings.enrollment_poll_rate_limit_requests,
-            window_seconds=settings.enrollment_poll_rate_limit_window_seconds,
-        )
+    return _redis_rate_limiter(
+        limit=settings.enrollment_poll_rate_limit_requests,
+        window_seconds=settings.enrollment_poll_rate_limit_window_seconds,
+        prefix="enroll_poll_rl",
+    )
 
 
 def get_enroll_request_rate_limiter() -> RateLimiter:

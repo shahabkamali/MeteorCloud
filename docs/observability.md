@@ -16,7 +16,7 @@ Prometheus (metrics) + node_exporter (host CPU/memory) + Grafana Alloy → Loki 
 make observability
 ```
 
-- Grafana: http://localhost:3001 (`admin` / `admin`)
+- Grafana: http://localhost:3001 (credentials via `GRAFANA_ADMIN_USER` / `GRAFANA_ADMIN_PASSWORD` env vars)
 - Prometheus: http://localhost:9090
 - App metrics: http://localhost:8000/metrics
 

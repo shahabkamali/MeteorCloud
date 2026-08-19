@@ -24,9 +24,7 @@ def test_metrics_endpoint_is_registered_outside_schema(client: TestClient) -> No
 def test_audit_router_is_mounted() -> None:
     application = create_app()
 
-    paths = {route.path for route in application.router.routes if hasattr(route, "path")}
-
-    assert "/api/v1/organizations/{organization_id}/audit-events" in paths
+    assert "/api/v1/organizations/{organization_id}/audit-events" in application.openapi()["paths"]
 
 
 def test_metrics_and_request_id_middleware_are_registered() -> None:

@@ -24,14 +24,25 @@ HTTP_DURATION = Histogram(
 _SKIP_PATHS = frozenset({"/health", "/api/v1/health", "/metrics"})
 
 
+def _iter_routes(routes):
+    for route in routes:
+        nested = getattr(route, "original_router", None)
+        if nested is not None:
+            yield from _iter_routes(nested.routes)
+            continue
+        yield route
+
+
 def _route_template(request: Request) -> str:
     path = request.url.path
     if path in _SKIP_PATHS:
         return path
-    for route in request.app.router.routes:
+    for route in _iter_routes(request.app.router.routes):
         match, _ = route.matches(request.scope)
         if match == Match.FULL:
-            return getattr(route, "path", path)
+            template = getattr(route, "path", None)
+            if template:
+                return template
     return "<unmatched>"
 
 

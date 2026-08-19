@@ -43,10 +43,10 @@ services:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')"]
-      interval: 15s
+      interval: 10s
       timeout: 5s
-      retries: 10
-      start_period: 20s
+      retries: 30
+      start_period: 60s
     networks:
       - platform
 
@@ -55,7 +55,7 @@ services:
     restart: unless-stopped
     depends_on:
       backend:
-        condition: service_healthy
+        condition: service_started
     networks:
       - platform
 
@@ -71,7 +71,7 @@ services:
       - /opt/edge-platform/traefik/acme.json:/acme.json
     depends_on:
       backend:
-        condition: service_healthy
+        condition: service_started
       frontend:
         condition: service_started
     networks:
@@ -103,7 +103,7 @@ services:
       - /opt/edge-platform/data/prometheus:/prometheus
     depends_on:
       backend:
-        condition: service_healthy
+        condition: service_started
     networks:
       - platform
 

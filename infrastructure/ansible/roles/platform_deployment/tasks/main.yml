@@ -51,13 +51,14 @@
   register: compose_up
   failed_when: false
 
-- name: Capture postgres logs after compose up
+- name: Capture compose logs after failed up
   ansible.builtin.command:
-    cmd: docker compose -f /opt/edge-platform/docker-compose.yml logs --tail=100 postgres
+    cmd: docker compose -f /opt/edge-platform/docker-compose.yml logs --tail=150 backend postgres redis
     chdir: /opt/edge-platform
-  register: postgres_logs
+  register: compose_logs
   changed_when: false
   failed_when: false
+  when: compose_up.rc != 0
 
 - name: Fail early if compose up reported an error
   ansible.builtin.fail:
@@ -65,8 +66,8 @@
       docker compose up failed (rc={{ compose_up.rc }}).
       stdout: {{ compose_up.stdout }}
       stderr: {{ compose_up.stderr }}
-      postgres logs:
-      {{ postgres_logs.stdout | default('') }}
+      service logs:
+      {{ compose_logs.stdout | default('') }}
   when: compose_up.rc != 0
 
 - name: Wait for PostgreSQL health
@@ -80,6 +81,33 @@
   delay: 5
   until: pg_ready.rc == 0
 
+- name: Wait for backend HTTP health
+  block:
+    - name: Probe backend /health
+      ansible.builtin.command:
+        cmd: >-
+          docker compose -f /opt/edge-platform/docker-compose.yml exec -T backend
+          python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)"
+        chdir: /opt/edge-platform
+      register: backend_ready
+      retries: 60
+      delay: 5
+      until: backend_ready.rc == 0
+  rescue:
+    - name: Capture backend logs after health wait
+      ansible.builtin.command:
+        cmd: docker compose -f /opt/edge-platform/docker-compose.yml logs --tail=200 backend
+        chdir: /opt/edge-platform
+      register: backend_logs
+      changed_when: false
+      failed_when: false
+
+    - name: Fail if backend did not become healthy
+      ansible.builtin.fail:
+        msg: |
+          backend did not serve /health in time.
+          backend logs:
+          {{ backend_logs.stdout | default('') }}
 
 - name: Run database migrations
   ansible.builtin.command:

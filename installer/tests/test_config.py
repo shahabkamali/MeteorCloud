@@ -5,8 +5,10 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+from pydantic import ValidationError
 
 from edge_installer.config.loader import load_configuration
+from edge_installer.config.models import ObservabilitySettings
 from edge_installer.config.validation import validate_configuration
 from edge_installer.exceptions import ConfigurationError
 
@@ -117,3 +119,54 @@ def test_validate_rejects_unimplemented_cloudwatch(
     errors = validate_configuration(config)
 
     assert any("cloudwatch is not implemented" in item for item in errors)
+
+def test_validate_allows_disabled_cloudwatch(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """cloudwatch is only rejected while observability is actually enabled."""
+    key_path = tmp_path / "key.pem"
+    key_path.write_text("key", encoding="utf-8")
+    monkeypatch.setenv("EDGE_PLATFORM_POSTGRES_PASSWORD", "secret")
+    monkeypatch.setenv("EDGE_PLATFORM_JWT_SECRET", "secret")
+
+    config = load_configuration(EXAMPLE)
+    config.aws.ssh_private_key_path = str(key_path)
+    config.observability.enabled = False
+    config.observability.backend = "cloudwatch"
+    errors = validate_configuration(config)
+
+    assert not any("cloudwatch" in item for item in errors)
+
+
+def test_validate_allows_enabled_prometheus(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    key_path = tmp_path / "key.pem"
+    key_path.write_text("key", encoding="utf-8")
+    monkeypatch.setenv("EDGE_PLATFORM_POSTGRES_PASSWORD", "secret")
+    monkeypatch.setenv("EDGE_PLATFORM_JWT_SECRET", "secret")
+
+    config = load_configuration(EXAMPLE)
+    config.aws.ssh_private_key_path = str(key_path)
+    config.observability.enabled = True
+    config.observability.backend = "prometheus"
+    errors = validate_configuration(config)
+
+    assert not any("cloudwatch" in item for item in errors)
+
+
+def test_observability_settings_defaults() -> None:
+    settings = ObservabilitySettings()
+
+    assert settings.enabled is False
+    assert settings.backend == "prometheus"
+
+
+def test_observability_settings_rejects_unknown_backend() -> None:
+    with pytest.raises(ValidationError):
+        ObservabilitySettings(backend="datadog")
+
+
+def test_observability_settings_rejects_unknown_field() -> None:
+    with pytest.raises(ValidationError):
+        ObservabilitySettings(enabled=True, backend="prometheus", extra_field="nope")

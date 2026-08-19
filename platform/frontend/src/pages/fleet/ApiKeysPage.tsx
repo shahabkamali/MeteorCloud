@@ -292,7 +292,8 @@ export function ApiKeysPage() {
             <p className="text-sm font-medium">API keys</p>
             <p className="text-xs text-muted-foreground">
               Devices use a key with <code>meteorcli config</code> and{" "}
-              <code>meteorcli request</code> to ask to join this organization.
+              <code>meteorcli request-token</code> to request a device token
+              and connect to this organization.
             </p>
           </div>
           <div>

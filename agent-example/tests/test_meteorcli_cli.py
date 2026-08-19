@@ -155,7 +155,7 @@ def test_request_polls_until_approved(tmp_path, monkeypatch, capsys) -> None:
         [
             "--config-dir",
             str(config_dir),
-            "request",
+            "request-token",
             "--server",
             "http://localhost:8000",
             "--api-key",
@@ -188,7 +188,7 @@ def test_request_rejected(tmp_path, monkeypatch, capsys) -> None:
         [
             "--config-dir",
             str(config_dir),
-            "request",
+            "request-token",
             "--server",
             "http://localhost:8000",
             "--api-key",
@@ -197,6 +197,132 @@ def test_request_rejected(tmp_path, monkeypatch, capsys) -> None:
     )
     assert code == 1
     assert "Unknown hardware" in capsys.readouterr().err
+
+
+def test_request_times_out_and_keeps_claim_secret(tmp_path, monkeypatch, capsys) -> None:
+    config_dir = tmp_path / "meteorcli"
+    client = FakeClient()
+    client.enroll_poll_responses = [
+        {"status": "pending", "poll_interval_seconds": 10},
+        {"status": "pending", "poll_interval_seconds": 10},
+    ]
+    monkeypatch.setattr(meteorcli, "EdgeClient", lambda server_url, **_: client)
+    monkeypatch.setattr(meteorcli.time, "sleep", lambda *_: None)
+
+    code = meteorcli.main(
+        [
+            "--config-dir",
+            str(config_dir),
+            "request-token",
+            "--server",
+            "http://localhost:8000",
+            "--api-key",
+            "key_abc",
+            "--wait",
+            "10",
+        ]
+    )
+    assert code == 2
+    out = capsys.readouterr().out
+    assert "meteorcli claim" in out
+    claim = (config_dir / "claim-secret").read_text(encoding="utf-8")
+    assert "req-1" in claim
+    assert "clm_secret-value" in claim
+    assert len(client.enroll_poll_calls) <= 2
+
+
+def test_request_refuses_second_submit_while_pending(tmp_path, monkeypatch, capsys) -> None:
+    config_dir = tmp_path / "meteorcli"
+    config_dir.mkdir()
+    (config_dir / "claim-secret").write_text(
+        '{"request_id": "req-1", "claim_secret": "clm_secret-value"}',
+        encoding="utf-8",
+    )
+    client = FakeClient()
+    monkeypatch.setattr(meteorcli, "EdgeClient", lambda server_url, **_: client)
+
+    code = meteorcli.main(
+        [
+            "--config-dir",
+            str(config_dir),
+            "request-token",
+            "--server",
+            "http://localhost:8000",
+            "--api-key",
+            "key_abc",
+        ]
+    )
+    assert code == 2
+    assert "pending enrollment request already exists" in capsys.readouterr().err
+    assert client.enroll_request_calls == []
+
+
+def test_request_alias_still_works(tmp_path, monkeypatch) -> None:
+    config_dir = tmp_path / "meteorcli"
+    client = FakeClient()
+    client.enroll_poll_responses = [
+        {
+            "status": "approved",
+            "device_id": "device-1",
+            "device_token": "dev_secret-value",
+            "organization_id": "org-1",
+            "name": "edge-01",
+            "heartbeat_interval_seconds": 60,
+            "poll_interval_seconds": 0,
+        }
+    ]
+    monkeypatch.setattr(meteorcli, "EdgeClient", lambda server_url, **_: client)
+    monkeypatch.setattr(meteorcli.time, "sleep", lambda *_: None)
+
+    code = meteorcli.main(
+        [
+            "--config-dir",
+            str(config_dir),
+            "request",
+            "--server",
+            "http://localhost:8000",
+            "--api-key",
+            "key_abc",
+            "--wait",
+            "0",
+        ]
+    )
+    assert code == 0
+    assert len(client.enroll_request_calls) == 1
+
+
+def test_claim_collects_later_approval(tmp_path, monkeypatch, capsys) -> None:
+    config_dir = tmp_path / "meteorcli"
+    config_dir.mkdir()
+    (config_dir / "config.json").write_text(
+        '{"server_url": "http://localhost:8000"}',
+        encoding="utf-8",
+    )
+    (config_dir / "claim-secret").write_text(
+        '{"request_id": "req-1", "claim_secret": "clm_secret-value"}',
+        encoding="utf-8",
+    )
+    client = FakeClient()
+    client.enroll_poll_responses = [
+        {
+            "status": "approved",
+            "device_id": "device-1",
+            "device_token": "dev_secret-value",
+            "organization_id": "org-1",
+            "name": "edge-01",
+            "heartbeat_interval_seconds": 60,
+            "poll_interval_seconds": 10,
+        }
+    ]
+    monkeypatch.setattr(meteorcli, "EdgeClient", lambda server_url, **_: client)
+
+    code = meteorcli.main(["--config-dir", str(config_dir), "claim"])
+    assert code == 0
+    out = capsys.readouterr().out
+    assert "Registered device device-1" in out
+    assert (config_dir / "device-token").read_text(encoding="utf-8") == "dev_secret-value"
+    assert not (config_dir / "claim-secret").exists()
+    assert client.enroll_poll_calls == [{"request_id": "req-1", "claim_secret": "clm_secret-value"}]
 
 
 def test_config_http_ip_uses_plain_http(tmp_path, capsys) -> None:
@@ -364,7 +490,8 @@ def test_help_lists_commands(capsys) -> None:
     assert excinfo.value.code == 0
     help_out = capsys.readouterr().out
     assert "register" in help_out
-    assert "request" in help_out
+    assert "request-token" in help_out
+    assert "claim" in help_out
     assert "config" in help_out
     assert "test" in help_out
     assert "run" in help_out

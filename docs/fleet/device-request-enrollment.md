@@ -11,14 +11,17 @@ documented in [device-registration.md](device-registration.md).
 
 1. An administrator creates an [API key](enrollment-api-keys.md) under **Fleet → API keys**.
 2. The device is configured (`meteorcli config --domain … --api-key …`) and runs
-   `meteorcli request`.
+   `meteorcli request-token`.
 3. `POST /api/v1/agent/enroll/request` (Bearer `key_…`) creates a pending
    request and returns a one-time `claim_secret` (`clm_…`).
 4. The administrator reviews the request on **Fleet → API keys** and approves or rejects it.
 5. The device polls `POST /api/v1/agent/enroll/poll` with `request_id` and
-   `claim_secret`. On first poll after approval the server issues a `dev_`
-   credential, creates/updates the device (same identity matching as token
-   registration), and returns the token once.
+   `claim_secret` for a limited time (`meteorcli request-token` defaults to 5 minutes,
+   at most once every 10 seconds). On first poll after approval the server
+   issues a `dev_` credential, creates/updates the device (same identity
+   matching as token registration), and returns the token once.
+6. If approval happens later, the same stored claim secret is used by
+   `meteorcli claim` — it does not submit a new enrollment request.
 
 ## Device endpoints
 
@@ -88,6 +91,8 @@ Reject body (optional): `{ "reason" }`. Mutation requires **owner** or **admin**
 ```bash
 meteorcli config --domain meteorxx.com --api-key key_...
 meteorcli test
-meteorcli request --name edge-01
+meteorcli request-token --name edge-01
+# if still pending, later:
+meteorcli claim
 meteorcli run
 ```

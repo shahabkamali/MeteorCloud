@@ -8,8 +8,8 @@ There are **two ways** to enroll a device:
 
 1. An administrator creates a registration token; the device runs `meteorcli register`.
 2. The device is configured with an organization API key and runs
-   `meteorcli request`; an administrator approves the pending request; the CLI
-   polls and then stores the device credential.
+   `meteorcli request-token`; an administrator approves the pending request; the CLI
+   polls for a limited time (or later `meteorcli claim`) and stores the device token.
 
 ## Install
 
@@ -28,7 +28,7 @@ Re-run the script to upgrade. Uninstall with `./installcli.sh --uninstall`
 
 Config and credentials go in `~/.config/meteorcli` for a normal user, or
 `/etc/meteorcli` when running as root. You do not need root to run
-`meteorcli config`, `test`, or `request` as your own user.
+`meteorcli config`, `test`, or `request-token` as your own user.
 
 For local development:
 
@@ -46,14 +46,15 @@ meteorcli <command> --help
 meteorcli --version
 ```
 
-| Command    | Purpose                                                          |
-| ---------- | ---------------------------------------------------------------- |
-| `config`   | Store the control-plane domain and API key.                      |
-| `test`     | Check that the server is reachable and the API key is valid.     |
-| `register` | Enroll with a one-time registration token (admin-initiated).     |
-| `request`  | Ask to join; wait for admin approval; save the device credential.|
-| `run`      | Send heartbeats (loop, or `--once`).                             |
-| `status`   | Show persisted, non-secret configuration.                        |
+| Command          | Purpose                                                              |
+| ---------------- | -------------------------------------------------------------------- |
+| `config`         | Store the control-plane domain and API key.                          |
+| `test`           | Check that the server is reachable and the API key is valid.         |
+| `register`       | Enroll with a one-time registration token (admin-initiated).         |
+| `request-token`  | Request a device token to connect this machine to the API.           |
+| `claim`          | Collect the device token after a later approval.                     |
+| `run`            | Send heartbeats (loop, or `--once`).                                 |
+| `status`         | Show persisted, non-secret configuration.                            |
 
 Environment variables: `METEORCLI_DOMAIN`, `METEORCLI_SERVER`, `METEORCLI_API_KEY`,
 `METEORCLI_TOKEN`, `METEORCLI_CONFIG_DIR` (default: `~/.config/meteorcli`, or
@@ -94,15 +95,26 @@ meteorcli register --token-file /tmp/meteorcli.token --name edge-01
 
 Or pass `--server` / `--token` explicitly if the CLI is not yet configured.
 
-## Path 2 — request enrollment
+## Path 2 — request a device token
 
 ```bash
-meteorcli request --name edge-01
+meteorcli request-token --name edge-01
 ```
 
-The command submits inventory, then polls until an administrator approves or
-rejects the request. On approval it stores the `dev_` credential (once) and
-exits. Use `meteorcli run` afterwards.
+The command asks the API for a device token, then polls for at most five minutes
+(override with `--wait`). It does not wait forever and will not poll faster than
+every 10 seconds. If the request is still pending, the claim secret stays on disk.
+
+When an administrator approves later (even the next day), collect the
+token without submitting a new request:
+
+```bash
+meteorcli claim
+```
+
+`meteorcli request-token` will refuse to create a second request while a claim is
+pending; pass `--new` only if you intend to replace it. Use `meteorcli run`
+after the token is stored.
 
 ## Send heartbeats
 

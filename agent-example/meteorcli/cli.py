@@ -5,7 +5,8 @@ Subcommands
   config     Store the control-plane domain and API key.
   test       Check that the server is reachable and the API key is valid.
   register   Register this device with a registration token (path 1).
-  request    Ask to join; wait for admin approval; save the device credential.
+  request-token  Ask the API for a device token; wait briefly for admin approval.
+  claim          Collect the device token after a later approval.
   run        Send periodic heartbeats.
   status     Show persisted (non-secret) configuration.
 
@@ -49,6 +50,13 @@ ENV_DOMAIN = "METEORCLI_DOMAIN"
 ENV_TOKEN = "METEORCLI_TOKEN"
 ENV_API_KEY = "METEORCLI_API_KEY"
 ENV_CONFIG_DIR = "METEORCLI_CONFIG_DIR"
+
+# Wait at most this long while polling for approval (override with --wait).
+DEFAULT_ENROLL_WAIT_SECONDS = 300
+# Never poll faster than this, even if the server suggests a shorter interval.
+MIN_POLL_INTERVAL_SECONDS = 10
+# Extra delay after HTTP 429 before the next poll (seconds).
+RATE_LIMIT_BACKOFF_SECONDS = 30
 
 
 def _normalize_secret(value: str | None) -> str | None:
@@ -211,6 +219,120 @@ def _persist_claimed_device(
     chown_config_dir(paths.config_path.parent)
 
 
+def _load_pending_claim(paths: CliPaths) -> dict | None:
+    raw = read_secret(paths.claim_secret_path)
+    if not raw:
+        return None
+    try:
+        data = json.loads(raw)
+    except json.JSONDecodeError:
+        return None
+    request_id = data.get("request_id")
+    claim_secret = data.get("claim_secret")
+    if not request_id or not claim_secret:
+        return None
+    return {"request_id": str(request_id), "claim_secret": str(claim_secret)}
+
+
+def _poll_interval(polled: dict | None, fallback: int) -> int:
+    suggested = fallback
+    if polled is not None and polled.get("poll_interval_seconds") is not None:
+        try:
+            suggested = int(polled["poll_interval_seconds"])
+        except (TypeError, ValueError):
+            suggested = fallback
+    return max(MIN_POLL_INTERVAL_SECONDS, suggested, 1)
+
+
+def _print_claimed(paths: CliPaths, polled: dict) -> None:
+    print(f"Registered device {polled['device_id']}")
+    print(f"Name:           {polled.get('name')}")
+    print(f"Credential:     stored at {paths.token_path}")
+    print()
+    print(f"Next: start sending heartbeats with '{PROG} run'.")
+
+
+def _print_pending_hint(request_id: str) -> None:
+    print(f"Enrollment request {request_id} is still waiting for approval.")
+    print(f"The claim secret is saved. When an administrator approves it, run '{PROG} claim'.")
+
+
+def _handle_poll_payload(paths: CliPaths, client: EdgeClient, polled: dict) -> int | None:
+    """Return an exit code for a terminal poll, or None to keep waiting."""
+    status = polled.get("status")
+    if status == "pending":
+        return None
+    if status == "rejected":
+        reason = polled.get("rejection_reason") or "no reason given"
+        print(f"Enrollment rejected: {reason}", file=sys.stderr)
+        remove_secret(paths.claim_secret_path)
+        return 1
+    if status == "expired":
+        print("Enrollment request expired. Submit a new request.", file=sys.stderr)
+        remove_secret(paths.claim_secret_path)
+        return 1
+    if status == "approved" and polled.get("device_token"):
+        _persist_claimed_device(paths, client, polled)
+        _print_claimed(paths, polled)
+        return 0
+    if status == "approved":
+        print("Approved, but the device credential was already claimed.", file=sys.stderr)
+        remove_secret(paths.claim_secret_path)
+        return 1
+    print(f"error: unexpected enrollment status: {status}", file=sys.stderr)
+    return 1
+
+
+def _poll_enrollment(
+    paths: CliPaths,
+    client: EdgeClient,
+    *,
+    request_id: str,
+    claim_secret: str,
+    wait_seconds: int,
+    fallback_interval: int,
+    sleep,
+    max_polls: int | None,
+) -> int:
+    wait_seconds = max(wait_seconds, 0)
+    deadline = time.monotonic() + wait_seconds
+    polls = 0
+    interval = max(MIN_POLL_INTERVAL_SECONDS, fallback_interval)
+    poll_cap = max(1, wait_seconds // interval + 1)
+    if max_polls is not None:
+        poll_cap = min(poll_cap, max_polls)
+    while True:
+        try:
+            polled = client.enroll_poll(request_id=request_id, claim_secret=claim_secret)
+        except AgentApiError as error:
+            if error.status == 429:
+                polls += 1
+                print(
+                    f"Server asked to slow down; waiting {RATE_LIMIT_BACKOFF_SECONDS}s "
+                    "before the next poll…",
+                    file=sys.stderr,
+                )
+                if wait_seconds == 0 or polls >= poll_cap or time.monotonic() >= deadline:
+                    _print_pending_hint(request_id)
+                    return 2
+                sleep(RATE_LIMIT_BACKOFF_SECONDS)
+                continue
+            print(f"error: poll failed: {error.message}", file=sys.stderr)
+            return 1
+
+        outcome = _handle_poll_payload(paths, client, polled)
+        if outcome is not None:
+            return outcome
+
+        polls += 1
+        interval = _poll_interval(polled, interval)
+        remaining = deadline - time.monotonic()
+        if wait_seconds == 0 or polls >= poll_cap or remaining <= 0:
+            _print_pending_hint(request_id)
+            return 2
+        sleep(min(interval, remaining))
+
+
 def _cmd_request(args: argparse.Namespace) -> int:
     paths = _paths_from_args(args)
     config = _load(paths)
@@ -232,6 +354,19 @@ def _cmd_request(args: argparse.Namespace) -> int:
         )
         return 2
 
+    pending = _load_pending_claim(paths)
+    if pending is not None and not args.new:
+        print(
+            f"error: a pending enrollment request already exists ({pending['request_id']}).",
+            file=sys.stderr,
+        )
+        print(
+            f"Run '{PROG} claim' to collect the token after approval, "
+            f"or '{PROG} request-token --new' to submit a different request.",
+            file=sys.stderr,
+        )
+        return 2
+
     client = EdgeClient(server)
     inventory = collect_inventory()
     try:
@@ -246,50 +381,68 @@ def _cmd_request(args: argparse.Namespace) -> int:
         paths.claim_secret_path,
         json.dumps({"request_id": request_id, "claim_secret": claim_secret}),
     )
-    interval = int(submitted.get("poll_interval_seconds") or 10)
+    interval = int(submitted.get("poll_interval_seconds") or MIN_POLL_INTERVAL_SECONDS)
     print(f"Enrollment request {request_id} submitted.")
-    print("Waiting for an administrator to approve this device…")
+    wait_seconds = max(0, int(args.wait))
+    if wait_seconds == 0:
+        print("Not waiting. After an administrator approves this device, collect the token with:")
+        print(f"  {PROG} claim")
+        return 0
 
-    sleep = args._sleep if hasattr(args, "_sleep") else time.sleep
-    max_polls = args._max_polls if hasattr(args, "_max_polls") else None
-    polls = 0
-    while True:
-        try:
-            polled = client.enroll_poll(request_id=request_id, claim_secret=claim_secret)
-        except AgentApiError as error:
-            print(f"error: poll failed: {error.message}", file=sys.stderr)
-            return 1
+    print(
+        "Waiting for an administrator to approve this device "
+        f"(at most {wait_seconds}s, polling every {max(MIN_POLL_INTERVAL_SECONDS, interval)}s)…"
+    )
+    return _poll_enrollment(
+        paths,
+        client,
+        request_id=request_id,
+        claim_secret=claim_secret,
+        wait_seconds=wait_seconds,
+        fallback_interval=interval,
+        sleep=getattr(args, "_sleep", time.sleep),
+        max_polls=getattr(args, "_max_polls", None),
+    )
 
-        status = polled.get("status")
-        if status == "pending":
-            polls += 1
-            if max_polls is not None and polls >= max_polls:
-                print("Still pending approval.")
-                return 0
-            sleep(int(polled.get("poll_interval_seconds") or interval))
-            continue
-        if status == "rejected":
-            reason = polled.get("rejection_reason") or "no reason given"
-            print(f"Enrollment rejected: {reason}", file=sys.stderr)
-            remove_secret(paths.claim_secret_path)
-            return 1
-        if status == "expired":
-            print("Enrollment request expired. Submit a new request.", file=sys.stderr)
-            remove_secret(paths.claim_secret_path)
-            return 1
-        if status == "approved" and polled.get("device_token"):
-            _persist_claimed_device(paths, client, polled)
-            print(f"Registered device {polled['device_id']}")
-            print(f"Name:           {polled.get('name')}")
-            print(f"Credential:     stored at {paths.token_path}")
-            print()
-            print(f"Next: start sending heartbeats with '{PROG} run'.")
-            return 0
-        if status == "approved":
-            print("Approved, but the device credential was already claimed.", file=sys.stderr)
-            return 1
-        print(f"error: unexpected enrollment status: {status}", file=sys.stderr)
-        return 1
+
+def _cmd_claim(args: argparse.Namespace) -> int:
+    paths = _paths_from_args(args)
+    config = _load(paths)
+    server = _resolve_server(args, config)
+    if not server:
+        print(
+            f"error: a server URL is required "
+            f"(use --server, {ENV_SERVER}, or '{PROG} config --domain').",
+            file=sys.stderr,
+        )
+        return 2
+
+    pending = _load_pending_claim(paths)
+    if pending is None:
+        print(
+            f"error: no pending token request to claim. "
+            f"Run '{PROG} request-token' first and keep this config directory.",
+            file=sys.stderr,
+        )
+        return 2
+
+    client = EdgeClient(server)
+    wait_seconds = max(0, int(args.wait))
+    if wait_seconds > 0:
+        print(
+            f"Checking enrollment request {pending['request_id']} "
+            f"(waiting up to {wait_seconds}s)…"
+        )
+    return _poll_enrollment(
+        paths,
+        client,
+        request_id=pending["request_id"],
+        claim_secret=pending["claim_secret"],
+        wait_seconds=wait_seconds,
+        fallback_interval=MIN_POLL_INTERVAL_SECONDS,
+        sleep=getattr(args, "_sleep", time.sleep),
+        max_polls=getattr(args, "_max_polls", None),
+    )
 
 
 def _cmd_test(args: argparse.Namespace) -> int:
@@ -360,7 +513,7 @@ def _load_or_fail(paths: CliPaths) -> tuple[AgentConfig, str] | None:
     if config is None or not config.device_id:
         print(
             f"error: this device is not registered. "
-            f"Run '{PROG} register' or '{PROG} request' first.",
+            f"Run '{PROG} register' or '{PROG} request-token' first.",
             file=sys.stderr,
         )
         return None
@@ -368,7 +521,7 @@ def _load_or_fail(paths: CliPaths) -> tuple[AgentConfig, str] | None:
     if device_token is None:
         print(
             f"error: device credential is missing. "
-            f"Re-register with '{PROG} register' or '{PROG} request'.",
+            f"Re-register with '{PROG} register' or '{PROG} request-token'.",
             file=sys.stderr,
         )
         return None
@@ -426,6 +579,9 @@ def _cmd_status(args: argparse.Namespace) -> int:
     print(f"Name:           {config.name if config and config.name else '—'}")
     print(f"Heartbeat:      every {config.heartbeat_interval_seconds if config else 60}s")
     print(f"Credential:     {'present' if has_credential else 'MISSING'}")
+    pending = _load_pending_claim(paths)
+    if pending is not None:
+        print(f"Pending claim:  {pending['request_id']} (run '{PROG} claim')")
     return 0 if config and config.device_id else 1
 
 
@@ -438,7 +594,8 @@ def build_parser() -> argparse.ArgumentParser:
             f"  {PROG} config --domain meteorxx.com --api-key key_XXXX\n"
             f"  {PROG} config --domain 192.168.0.107:8000 --api-key key_XXXX\n"
             f"  {PROG} test\n"
-            f"  {PROG} request --name edge-01\n"
+            f"  {PROG} request-token --name edge-01\n"
+            f"  {PROG} claim\n"
             f"  {PROG} register --token reg_XXXX\n"
             f"  {PROG} run\n"
             f"  {PROG} status\n"
@@ -559,11 +716,15 @@ def build_parser() -> argparse.ArgumentParser:
     register_parser.set_defaults(func=_cmd_register)
 
     request_parser = subparsers.add_parser(
-        "request",
-        help="Request enrollment and wait for admin approval.",
+        "request-token",
+        aliases=["request"],
+        help="Request a device token to connect this machine to the API.",
         description=(
-            "Submit a device-initiated enrollment request using the stored API key, "
-            "then poll until an administrator approves or rejects it."
+            "Ask the control-plane API for a device token so this machine can connect. "
+            "Uses the stored organization API key, then waits a limited time for an "
+            "administrator to approve. If approval takes longer, run "
+            f"'{PROG} claim' later. Does not wait forever and will not poll faster "
+            f"than every {MIN_POLL_INTERVAL_SECONDS}s."
         ),
     )
     request_parser.add_argument(
@@ -584,7 +745,45 @@ def build_parser() -> argparse.ArgumentParser:
         metavar="NAME",
         help="Optional requested device name.",
     )
+    request_parser.add_argument(
+        "--wait",
+        type=int,
+        default=DEFAULT_ENROLL_WAIT_SECONDS,
+        metavar="SECONDS",
+        help=(
+            "How long to poll for approval "
+            f"(default: {DEFAULT_ENROLL_WAIT_SECONDS}; 0 submits and exits)."
+        ),
+    )
+    request_parser.add_argument(
+        "--new",
+        action="store_true",
+        help="Submit a new token request even if a pending claim secret is already stored.",
+    )
     request_parser.set_defaults(func=_cmd_request)
+
+    claim_parser = subparsers.add_parser(
+        "claim",
+        help="Collect the device token after a later approval.",
+        description=(
+            "Use the stored claim secret from a previous request-token run to "
+            "collect the device token once an administrator has approved it."
+        ),
+    )
+    claim_parser.add_argument(
+        "--server",
+        default=None,
+        metavar="URL",
+        help=f"Control-plane base URL (or set {ENV_SERVER}).",
+    )
+    claim_parser.add_argument(
+        "--wait",
+        type=int,
+        default=0,
+        metavar="SECONDS",
+        help="Poll this long for approval (default: 0, a single check).",
+    )
+    claim_parser.set_defaults(func=_cmd_claim)
 
     run_parser = subparsers.add_parser(
         "run",

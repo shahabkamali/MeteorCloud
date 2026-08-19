@@ -38,7 +38,8 @@ Create and revoke require **owner** or **admin**. Any member may list keys.
 ```bash
 meteorcli config --domain meteorxx.com --api-key key_...
 meteorcli test
-meteorcli request --name edge-01
+meteorcli request-token --name edge-01
+meteorcli claim   # if approval happened after the first wait ended
 ```
 
 See [device-request-enrollment.md](device-request-enrollment.md).

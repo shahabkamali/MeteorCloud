@@ -1,6 +1,7 @@
-.PHONY: help dev stop up down plan status-aws test lint format typecheck install-backend install-frontend install-installer install-agent clean migrate seed backend-test frontend-test agent-test installer-test terraform-check ansible-check
+.PHONY: help dev stop up down plan status-aws test lint format typecheck install-backend install-frontend install-installer install-agent clean migrate seed backend-test frontend-test agent-test installer-test terraform-check ansible-check observability
 
 COMPOSE := docker compose -f docker-compose.yml -f docker-compose.dev.yml
+OBS_COMPOSE := $(COMPOSE) -f docker-compose.observability.yml
 BACKEND_DIR := platform/backend
 FRONTEND_DIR := platform/frontend
 INSTALLER_DIR := installer
@@ -22,8 +23,20 @@ dev: ## Start the development stack
 	@echo "  Health:   http://localhost:8000/health"
 	@echo "  Seed:     make seed"
 
+observability: ## Start the development stack plus Prometheus, Loki, and Grafana
+	@test -f .env || cp .env.example .env
+	$(OBS_COMPOSE) up --build -d
+	@echo ""
+	@echo "Observability stack is starting:"
+	@echo "  App:        http://localhost:5173"
+	@echo "  API:        http://localhost:8000"
+	@echo "  Metrics:    http://localhost:8000/metrics"
+	@echo "  Prometheus: http://localhost:9090"
+	@echo "  Grafana:    http://localhost:3001  (admin / admin)"
+
 stop: ## Stop the development stack
 	$(COMPOSE) down
+	docker compose -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.observability.yml down 2>/dev/null || true
 
 up: ## Deploy all enabled AWS services (Terraform + Ansible)
 	@test -f $(CONFIG) || (echo "Missing $(CONFIG). Copy from installer/edge_installer/config/examples/installation.yaml" && exit 1)

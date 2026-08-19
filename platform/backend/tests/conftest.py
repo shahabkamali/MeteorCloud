@@ -17,6 +17,7 @@ from app.core.security import hash_password
 from app.main import create_app
 
 # Ensure metadata includes domain models.
+from app.modules.audit import models as _audit_models  # noqa: F401
 from app.modules.fleet import models as _fleet_models  # noqa: F401
 from app.modules.fleet.dependencies import (
     get_enroll_poll_rate_limiter,

@@ -61,6 +61,12 @@ def validate_configuration(config: InstallationConfig) -> list[str]:
     if config.platform.domain and config.platform.public_url:
         errors.append("platform.domain and platform.public_url cannot both be set")
 
+    if config.observability.enabled and config.observability.backend == "cloudwatch":
+        errors.append(
+            "observability.backend=cloudwatch is not implemented yet; "
+            "use backend=prometheus or set observability.enabled=false"
+        )
+
     return errors
 
 

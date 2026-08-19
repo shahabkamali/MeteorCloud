@@ -19,7 +19,8 @@ dependencies = [
   "python-jose[cryptography]>=3.3.0",
   "bcrypt>=4.2.0",
   "email-validator>=2.2.0",
-  "redis>=5.2.0",
+  "structlog>=24.4.0",
+  "prometheus-client>=0.21.0",
 ]
 
 [project.optional-dependencies]
@@ -37,7 +38,7 @@ testpaths = ["tests"]
 pythonpath = ["."]
 
 [tool.ruff]
-line-length = 100
+line-length = 120
 target-version = "py313"
 
 [tool.ruff.lint]

@@ -63,3 +63,9 @@ deployment:
 
 secrets:
   source: environment
+
+# Optional Grafana stack (Prometheus, Loki, Alloy, node_exporter).
+# Keep false on t3.small. cloudwatch is reserved and not implemented yet.
+observability:
+  enabled: false
+  backend: prometheus

@@ -87,6 +87,7 @@ make ansible-check
 | **Upgrades** | [docs/upgrades.md](docs/upgrades.md) |
 | **Destroy** | [docs/destroy.md](docs/destroy.md) |
 | **Troubleshooting** | [docs/troubleshooting.md](docs/troubleshooting.md) |
+| **Observability** | [docs/observability.md](docs/observability.md) |
 | **Architecture** | [docs/architecture.md](docs/architecture.md) |
 | **Development** | [docs/development.md](docs/development.md) |
 | **Auth & orgs** | [docs/identity-and-organizations.md](docs/identity-and-organizations.md) |

@@ -1,0 +1,96 @@
+# Loki, Prometheus, Grafana, Alloy, and node_exporter.
+# Start with: make observability
+# Not used by `make dev` so small machines skip the extra RAM.
+
+services:
+  backend:
+    environment:
+      LOG_FORMAT: json
+      OBSERVABILITY_BACKEND: prometheus
+
+  node-exporter:
+    image: prom/node-exporter:v1.8.2
+    pid: host
+    command:
+      - "--path.procfs=/host/proc"
+      - "--path.sysfs=/host/sys"
+      - "--path.rootfs=/host/root"
+      - "--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)"
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/host/root:ro
+    networks:
+      - default
+
+  prometheus:
+    image: prom/prometheus:v2.55.1
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.retention.time=15d"
+    volumes:
+      - ./platform/observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    ports:
+      - "9090:9090"
+    depends_on:
+      - backend
+      - node-exporter
+    networks:
+      - default
+
+  loki:
+    image: grafana/loki:3.3.2
+    command: ["-config.file=/etc/loki/loki.yml"]
+    volumes:
+      - ./platform/observability/loki.yml:/etc/loki/loki.yml:ro
+    networks:
+      - default
+
+  docker-socket-proxy:
+    image: tecnativa/docker-socket-proxy:0.3.0
+    environment:
+      CONTAINERS: 1
+      POST: 0
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - docker_proxy
+
+  alloy:
+    image: grafana/alloy:v1.8.3
+    command:
+      - run
+      - /etc/alloy/config.alloy
+      - --storage.path=/var/lib/alloy/data
+    volumes:
+      - ./platform/observability/config.alloy:/etc/alloy/config.alloy:ro
+    depends_on:
+      - loki
+      - docker-socket-proxy
+    networks:
+      - default
+      - docker_proxy
+
+  grafana:
+    image: grafana/grafana:11.4.0
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+    volumes:
+      - ./platform/observability/grafana/provisioning:/etc/grafana/provisioning:ro
+    ports:
+      - "3001:3000"
+    depends_on:
+      - prometheus
+      - loki
+    networks:
+      - default
+
+volumes:
+  prometheus_data:
+
+networks:
+  docker_proxy:
+    internal: true

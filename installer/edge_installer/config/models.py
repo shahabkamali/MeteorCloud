@@ -100,6 +100,19 @@ class SecretsSettings(BaseModel):
     source: Literal["environment"] = "environment"
 
 
+class ObservabilitySettings(BaseModel):
+    """Ops telemetry sink. App always emits JSON logs and /metrics.
+
+    ``prometheus`` runs Loki + Prometheus + Grafana on the instance.
+    ``cloudwatch`` is reserved and rejected until that shipper is implemented.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    enabled: bool = False
+    backend: Literal["prometheus", "cloudwatch"] = "prometheus"
+
+
 class CloudAppServiceSettings(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -145,6 +158,7 @@ class InstallationConfig(BaseModel):
     components: ComponentsSettings = Field(default_factory=ComponentsSettings)
     deployment: DeploymentSettings
     secrets: SecretsSettings = Field(default_factory=SecretsSettings)
+    observability: ObservabilitySettings = Field(default_factory=ObservabilitySettings)
 
     def enabled_component_names(self) -> list[str]:
         names: list[str] = []

@@ -9,11 +9,13 @@ from __future__ import annotations
 
 import uuid
 from datetime import UTC, datetime
+from typing import Any
 
 from sqlalchemy.orm import Session
 
 from app.core.config import Settings, get_settings
 from app.core.exceptions import ConflictError, ForbiddenError, NotFoundError
+from app.modules.audit.service import AuditRecorder
 from app.modules.fleet.models import (
     Device,
     DeviceEnrollmentRequest,
@@ -74,6 +76,26 @@ class FleetService:
         self.devices = DeviceRepository(session)
         self.api_keys = EnrollmentApiKeyRepository(session)
         self.enrollment_requests = DeviceEnrollmentRequestRepository(session)
+        self.audit = AuditRecorder(session)
+
+    def _record_audit(
+        self,
+        *,
+        actor: User,
+        organization_id: uuid.UUID,
+        action: str,
+        resource_type: str,
+        resource_id: uuid.UUID | str | None = None,
+        metadata: dict[str, Any] | None = None,
+    ) -> None:
+        self.audit.record(
+            actor=actor,
+            organization_id=organization_id,
+            action=action,
+            resource_type=resource_type,
+            resource_id=resource_id,
+            metadata=metadata,
+        )
 
     # ---------------------------------------------------------------- helpers
     def _require_membership(
@@ -354,6 +376,14 @@ class FleetService:
             created_by_user_id=actor.id,
         )
         self.tokens.create(token)
+        self._record_audit(
+            actor=actor,
+            organization_id=organization_id,
+            action="registration_token.create",
+            resource_type="registration_token",
+            resource_id=token.id,
+            metadata={"name": token.name},
+        )
         self.session.commit()
         self.session.refresh(token)
 
@@ -381,6 +411,13 @@ class FleetService:
         if token.revoked_at is None:
             token.revoked_at = datetime.now(UTC)
             self.tokens.update(token)
+            self._record_audit(
+                actor=actor,
+                organization_id=organization_id,
+                action="registration_token.revoke",
+                resource_type="registration_token",
+                resource_id=token.id,
+            )
             self.session.commit()
             self.session.refresh(token)
         return RegistrationTokenResponse.model_validate(token)
@@ -421,6 +458,14 @@ class FleetService:
             created_by_user_id=actor.id,
         )
         self.api_keys.create(key)
+        self._record_audit(
+            actor=actor,
+            organization_id=organization_id,
+            action="enrollment_key.create",
+            resource_type="enrollment_key",
+            resource_id=key.id,
+            metadata={"name": key.name},
+        )
         self.session.commit()
         self.session.refresh(key)
 
@@ -448,6 +493,13 @@ class FleetService:
         if key.revoked_at is None:
             key.revoked_at = datetime.now(UTC)
             self.api_keys.update(key)
+            self._record_audit(
+                actor=actor,
+                organization_id=organization_id,
+                action="enrollment_key.revoke",
+                resource_type="enrollment_key",
+                resource_id=key.id,
+            )
             self.session.commit()
             self.session.refresh(key)
         return EnrollmentApiKeyResponse.model_validate(key)
@@ -497,6 +549,13 @@ class FleetService:
         request.reviewed_by_user_id = actor.id
         request.reviewed_at = datetime.now(UTC)
         self.enrollment_requests.update(request)
+        self._record_audit(
+            actor=actor,
+            organization_id=organization_id,
+            action="enrollment_request.approve",
+            resource_type="enrollment_request",
+            resource_id=request.id,
+        )
         self.session.commit()
         self.session.refresh(request)
         return DeviceEnrollmentRequestResponse.model_validate(request)
@@ -522,6 +581,13 @@ class FleetService:
         request.reviewed_by_user_id = actor.id
         request.reviewed_at = datetime.now(UTC)
         self.enrollment_requests.update(request)
+        self._record_audit(
+            actor=actor,
+            organization_id=organization_id,
+            action="enrollment_request.reject",
+            resource_type="enrollment_request",
+            resource_id=request.id,
+        )
         self.session.commit()
         self.session.refresh(request)
         return DeviceEnrollmentRequestResponse.model_validate(request)
@@ -636,7 +702,16 @@ class FleetService:
         membership = self._require_membership(organization_id, actor.id)
         self._require_manage(membership.role)
         device = self._require_device(organization_id, device_id)
+        device_name = device.name
         self.devices.delete(device)
+        self._record_audit(
+            actor=actor,
+            organization_id=organization_id,
+            action="device.delete",
+            resource_type="device",
+            resource_id=device_id,
+            metadata={"name": device_name},
+        )
         self.session.commit()
 
     def set_device_enabled(

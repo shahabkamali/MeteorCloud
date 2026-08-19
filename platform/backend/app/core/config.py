@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from functools import lru_cache
+from typing import Literal
 
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -102,6 +103,12 @@ class Settings(BaseSettings):
     )
 
     log_level: str = Field(default="INFO", alias="LOG_LEVEL")
+    log_format: Literal["console", "json"] = Field(default="console", alias="LOG_FORMAT")
+    observability_backend: Literal["prometheus", "cloudwatch"] = Field(
+        default="prometheus",
+        alias="OBSERVABILITY_BACKEND",
+        description="prometheus (Loki/Grafana) or cloudwatch (reserved, not implemented).",
+    )
 
     @property
     def cors_origins(self) -> list[str]:

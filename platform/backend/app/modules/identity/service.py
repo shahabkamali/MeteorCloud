@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 from app.core.config import Settings, get_settings
 from app.core.exceptions import ConflictError, UnauthorizedError
 from app.core.security import create_access_token, hash_password, verify_password
+from app.modules.audit.service import AuditRecorder
 from app.modules.identity.models import User
 from app.modules.identity.repository import UserRepository
 from app.modules.identity.schemas import (
@@ -18,6 +19,7 @@ from app.modules.identity.schemas import (
     UserPublic,
     UserRegisterRequest,
 )
+from app.modules.organizations.repository import OrganizationRepository
 
 
 class AuthenticationService:
@@ -73,7 +75,22 @@ class AuthenticationService:
 
     def login(self, payload: UserLoginRequest) -> TokenResponse:
         user = self.authenticate(payload)
-        return self.issue_access_token(user)
+        token = self.issue_access_token(user)
+        audit = AuditRecorder(self.session)
+        organization_ids = [
+            organization.id
+            for organization, _membership in OrganizationRepository(self.session).list_for_user(user.id)
+        ] or [None]
+        for organization_id in organization_ids:
+            audit.record(
+                actor=user,
+                action="auth.login",
+                resource_type="user",
+                resource_id=user.id,
+                organization_id=organization_id,
+            )
+        self.session.commit()
+        return token
 
     def get_user_by_id(self, user_id: uuid.UUID) -> User | None:
         return self.users.get_by_id(user_id)

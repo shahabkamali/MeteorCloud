@@ -11,6 +11,7 @@ def test_metrics_endpoint_exposes_prometheus(client: TestClient) -> None:
     assert response.status_code == 200
     body = response.text
     assert "python_info" in body or "process_cpu_seconds_total" in body
+    assert "http_requests_total" in body or "http_request_duration_seconds" in body
 
 
 def test_health_sets_request_id_header(client: TestClient) -> None:

@@ -32,11 +32,11 @@ observability: ## Start the development stack plus Prometheus, Loki, and Grafana
 	@echo "  API:        http://localhost:8000"
 	@echo "  Metrics:    http://localhost:8000/metrics"
 	@echo "  Prometheus: http://localhost:9090"
-	@echo "  Grafana:    http://localhost:3001  (admin / admin)"
+	@echo "  Grafana:    http://localhost:3001  (set GRAFANA_ADMIN_USER/PASSWORD)"
 
 stop: ## Stop the development stack
 	$(COMPOSE) down
-	docker compose -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.observability.yml down 2>/dev/null || true
+	docker compose -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.observability.yml down 2>/dev/null
 
 up: ## Deploy all enabled AWS services (Terraform + Ansible)
 	@test -f $(CONFIG) || (echo "Missing $(CONFIG). Copy from installer/edge_installer/config/examples/installation.yaml" && exit 1)

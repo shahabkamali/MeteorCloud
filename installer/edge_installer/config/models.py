@@ -101,7 +101,7 @@ class SecretsSettings(BaseModel):
 
 
 class ObservabilitySettings(BaseModel):
-    """Ops telemetry sink. App always emits JSON logs and /metrics.
+    """Ops telemetry sink. LOG_FORMAT setting selects console or JSON log output; /metrics endpoint is always available.
 
     ``prometheus`` runs Loki + Prometheus + Grafana on the instance.
     ``cloudwatch`` is reserved and rejected until that shipper is implemented.

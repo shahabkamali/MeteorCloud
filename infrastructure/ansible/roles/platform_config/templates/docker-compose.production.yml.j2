@@ -36,6 +36,8 @@ services:
     restart: unless-stopped
     env_file:
       - /opt/edge-platform/config/platform.env
+    environment:
+      LOG_FORMAT: "{{ log_format | default('console') }}"
     depends_on:
       postgres:
         condition: service_healthy

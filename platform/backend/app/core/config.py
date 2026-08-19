@@ -119,6 +119,16 @@ class Settings(BaseSettings):
     def normalize_env(cls, value: str) -> str:
         return value.lower()
 
+    @field_validator("log_format", mode="before")
+    @classmethod
+    def normalize_log_format(cls, value: object) -> str:
+        text = str(value).strip().lower() if value is not None else ""
+        if text in {"", "none", "false", "0", "no", "off"}:
+            return "console"
+        if text in {"true", "1", "yes", "on"}:
+            return "json"
+        return text
+
 
 @lru_cache
 def get_settings() -> Settings:

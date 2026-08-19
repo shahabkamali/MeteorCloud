@@ -42,6 +42,11 @@ def test_log_format_reads_json_from_env() -> None:
     assert settings.log_format == "json"
 
 
+def test_log_format_treats_empty_and_false_as_console() -> None:
+    assert Settings(_env_file=None, LOG_FORMAT="").log_format == "console"
+    assert Settings(_env_file=None, LOG_FORMAT="false").log_format == "console"
+
+
 def test_log_format_rejects_unknown_value() -> None:
     with pytest.raises(ValidationError):
         Settings(_env_file=None, LOG_FORMAT="xml")

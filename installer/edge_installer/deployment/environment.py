@@ -40,6 +40,7 @@ def build_ansible_extra_vars(
         "platform_env": config.installation.environment,
         "observability_enabled": str(config.observability.enabled).lower(),
         "observability_backend": config.observability.backend,
+        "log_format": "json" if config.observability.enabled else "console",
         "vpn_listen_port": str(config.services.vpn.listen_port),
         "vpn_network_cidr": config.services.vpn.network_cidr,
         "vpn_server_address": config.services.vpn.server_address,

@@ -94,6 +94,44 @@ jobs:
       - name: Test (pytest)
         run: python -m pytest -q
 
+  mqtt:
+    name: MQTT (local Compose)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: platform/backend/pyproject.toml
+      - name: Install MQTT test dependencies
+        run: python -m pip install pytest paho-mqtt
+      - name: MQTT live tests
+        env:
+          MQTT_COMPOSE_DOWN: "1"
+          MQTT_COMPOSE_BUILD: "1"
+          PYTHONPATH: ${{ github.workspace }}/tests
+        run: make test-mqtt
+
+  infra:
+    name: Terraform / Ansible
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+      - uses: hashicorp/setup-terraform@v4
+        with:
+          terraform_version: "1.9.8"
+          terraform_wrapper: false
+      - name: Install Ansible
+        run: python -m pip install ansible
+      - name: Terraform check
+        run: make terraform-check
+      - name: Ansible check
+        run: make ansible-check
+
   frontend:
     name: Frontend (vitest)
     runs-on: ubuntu-latest

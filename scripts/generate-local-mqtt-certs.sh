@@ -7,7 +7,9 @@ mkdir -p "$OUT"
 
 openssl genrsa -out "$OUT/ca.key" 2048 >/dev/null 2>&1
 openssl req -x509 -new -nodes -key "$OUT/ca.key" -sha256 -days 3650 \
-  -out "$OUT/ca.crt" -subj "/CN=MeteorCloud Local MQTT CA" >/dev/null 2>&1
+  -out "$OUT/ca.crt" -subj "/CN=MeteorCloud Local MQTT CA" \
+  -addext "basicConstraints=critical,CA:true" \
+  -addext "keyUsage=critical,keyCertSign,cRLSign" >/dev/null 2>&1
 
 openssl genrsa -out "$OUT/server.key" 2048 >/dev/null 2>&1
 openssl req -new -key "$OUT/server.key" -out "$OUT/server.csr" \

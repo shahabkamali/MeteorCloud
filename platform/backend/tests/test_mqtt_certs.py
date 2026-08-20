@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import stat
 import subprocess
 from pathlib import Path
 
@@ -30,6 +31,10 @@ def test_certificate_script_generates_localhost_san(tmp_path: Path) -> None:
     assert "DNS:localhost" in text
     assert "127.0.0.1" in text
     assert "Wrote MQTT" in result.stdout
+    assert stat.S_IMODE((out / "server.key").stat().st_mode) == 0o640
+    assert stat.S_IMODE((out / "ca.key").stat().st_mode) == 0o600
+    assert stat.S_IMODE((out / "ca.crt").stat().st_mode) == 0o644
+    assert stat.S_IMODE((out / "server.crt").stat().st_mode) == 0o644
 
 
 def test_broker_tls_config_exists() -> None:
@@ -41,3 +46,9 @@ def test_broker_tls_config_exists() -> None:
     assert 'bind = "0.0.0.0:8883"' in conf
     assert "listeners.tcp.default" in conf
     assert "enable = false" in conf
+    assert "EMQX_AUTHENTICATION__1__HEADERS" in compose
+    assert "EMQX_AUTHORIZATION__SOURCES__1__HEADERS" in compose
+    assert "EMQXVAR_MQTT_INTERNAL_TOKEN: ${MQTT_INTERNAL_TOKEN:-dev-mqtt-internal}" not in compose
+    assert "${MQTT_INTERNAL_TOKEN:?MQTT_INTERNAL_TOKEN is required}" in compose
+    assert "getenv(" not in conf
+    assert 'x-mqtt-internal-token = "dev-mqtt-internal"' not in conf

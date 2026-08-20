@@ -42,31 +42,41 @@ def write_mqtt_config(config_dir: Path, mqtt: MqttConfig) -> None:
 
 
 def read_mqtt_config(config_dir: Path) -> MqttConfig | None:
+    from edge_agent.persist import recover_device_secrets
+
+    recover_device_secrets(config_dir)
     mqtt_path, _ca_path = mqtt_paths(config_dir)
     try:
         raw = mqtt_path.read_text(encoding="utf-8")
-    except FileNotFoundError:
+    except OSError:
         return None
-    data = json.loads(raw)
-    ca_cert = None
-    ca_cert_path = data.get("ca_cert_path")
-    if ca_cert_path:
-        try:
-            ca_cert = Path(ca_cert_path).read_text(encoding="utf-8")
-        except FileNotFoundError:
-            ca_cert = None
-    password = data.get("password")
-    if not password:
+    try:
+        data = json.loads(raw)
+        if not isinstance(data, dict):
+            return None
+        ca_cert = None
+        ca_cert_path = data.get("ca_cert_path")
+        if ca_cert_path:
+            try:
+                ca_cert = Path(ca_cert_path).read_text(encoding="utf-8")
+            except OSError:
+                ca_cert = None
+        password = data.get("password")
+        if not password:
+            return None
+        if data.get("tls", True) is not True:
+            return None
+        return MqttConfig(
+            host=str(data.get("host") or "localhost"),
+            port=int(data.get("port") or 8883),
+            username=str(data.get("username") or ""),
+            password=str(password),
+            tls=True,
+            ca_cert=ca_cert,
+            ca_path=str(ca_cert_path) if ca_cert_path else None,
+        )
+    except (json.JSONDecodeError, TypeError, ValueError):
         return None
-    return MqttConfig(
-        host=str(data.get("host") or "localhost"),
-        port=int(data.get("port") or 8883),
-        username=str(data.get("username") or ""),
-        password=str(password),
-        tls=bool(data.get("tls", True)),
-        ca_cert=ca_cert,
-        ca_path=str(ca_cert_path) if ca_cert_path else None,
-    )
 
 
 def mqtt_from_api_payload(payload: dict) -> MqttConfig | None:
@@ -76,11 +86,13 @@ def mqtt_from_api_payload(payload: dict) -> MqttConfig | None:
     password = data.get("password")
     if not password:
         return None
+    if data.get("tls", True) is not True:
+        return None
     return MqttConfig(
         host=str(data.get("host") or "localhost"),
         port=int(data.get("port") or 8883),
         username=str(data.get("username") or ""),
         password=str(password),
-        tls=bool(data.get("tls", True)),
+        tls=True,
         ca_cert=data.get("ca_cert"),
     )

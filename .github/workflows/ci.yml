@@ -97,8 +97,12 @@ jobs:
   mqtt:
     name: MQTT (local Compose)
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
       - uses: actions/setup-python@v6
         with:
           python-version: "3.13"
@@ -110,14 +114,19 @@ jobs:
         env:
           MQTT_COMPOSE_DOWN: "1"
           MQTT_COMPOSE_BUILD: "1"
+          MQTT_INTERNAL_TOKEN: mqtt-ci-${{ github.run_id }}
           PYTHONPATH: ${{ github.workspace }}/tests
         run: make test-mqtt
 
   infra:
     name: Terraform / Ansible
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
       - uses: actions/setup-python@v6
         with:
           python-version: "3.13"

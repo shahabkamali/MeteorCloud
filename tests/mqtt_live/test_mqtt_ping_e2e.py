@@ -22,7 +22,7 @@ def test_ping_pong_e2e(api, live_config):
         assert session.wait_connected() is True
         assert session.wait_subscribed() is True
         response = api.ping(device.device_id)
-        assert response["status"] == "completed"
+        assert response["status"] == "completed", response
         result = response.get("result") or {}
         assert result.get("message") == "pong" or (result.get("result") or {}).get("message") == "pong"
     finally:

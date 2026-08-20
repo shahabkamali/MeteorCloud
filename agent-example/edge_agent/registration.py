@@ -8,9 +8,10 @@ from pathlib import Path
 
 from edge_agent.client import EdgeClient
 from edge_agent.config import AgentConfig, AgentPaths, load_config, save_config
-from edge_agent.credentials import remove_file, write_device_token
+from edge_agent.credentials import remove_file
 from edge_agent.inventory import collect_inventory
-from edge_agent.mqtt_config import mqtt_from_api_payload, write_mqtt_config
+from edge_agent.mqtt_config import mqtt_from_api_payload
+from edge_agent.persist import persist_device_secrets
 
 logger = logging.getLogger("edge_agent")
 
@@ -39,11 +40,12 @@ def register(
     inventory = collect_inventory()
     response = client.register(token=token, inventory=inventory, name=name)
 
-    # Persist the secret credential first (atomic, 0600), then non-secret config.
-    write_device_token(paths.token_path, response["device_token"])
-    mqtt = mqtt_from_api_payload(response)
-    if mqtt is not None:
-        write_mqtt_config(paths.config_path.parent, mqtt)
+    persist_device_secrets(
+        paths.config_path.parent,
+        paths.token_path,
+        response["device_token"],
+        mqtt_from_api_payload(response),
+    )
     existing = load_config(paths)
     config = AgentConfig(
         server_url=client.server_url,

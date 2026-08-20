@@ -179,10 +179,17 @@ class MqttSession:
     ) -> None:
         payload = message.payload.decode("utf-8", errors="replace")
         self.messages.append((message.topic, payload))
-        if self.handle_ping and self.device_id:
+        client = self._client
+        if self.handle_ping and self.device_id and client is not None:
             reply = ping_reply(payload)
             if reply is not None:
-                self.publish(f"devices/{self.device_id}/commands/result", json.dumps(reply))
+                # Do not wait_for_publish here: on_message runs on the paho loop thread.
+                client.publish(
+                    f"devices/{self.device_id}/commands/result",
+                    json.dumps(reply),
+                    qos=1,
+                    retain=False,
+                )
 
 
 def try_connect(**kwargs: object) -> MqttSession:

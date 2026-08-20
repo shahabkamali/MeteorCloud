@@ -46,6 +46,9 @@ services:
       - ./certs:/certs:ro
     ports:
       - "${BACKEND_PORT:-8000}:8000"
+    command: >
+      sh -c "alembic upgrade head &&
+             uvicorn app.main:app --host 0.0.0.0 --port 8000"
     depends_on:
       postgres:
         condition: service_healthy
@@ -60,6 +63,9 @@ services:
     environment:
       EMQX_DASHBOARD__DEFAULT_USERNAME: admin
       EMQX_DASHBOARD__DEFAULT_PASSWORD: public
+      # EMQX 5.8 HOCON does not accept getenv() in emqx.conf; override HTTP headers from env.
+      EMQX_AUTHENTICATION__1__HEADERS: '{"content-type" = "application/json", "x-mqtt-internal-token" = "${MQTT_INTERNAL_TOKEN:?MQTT_INTERNAL_TOKEN is required}"}'
+      EMQX_AUTHORIZATION__SOURCES__1__HEADERS: '{"content-type" = "application/json", "x-mqtt-internal-token" = "${MQTT_INTERNAL_TOKEN:?MQTT_INTERNAL_TOKEN is required}"}'
     ports:
       - "8883:8883"
       - "18083:18083"
@@ -68,11 +74,12 @@ services:
       - ./certs/ca.crt:/opt/emqx/etc/certs/ca.crt:ro
       - ./certs/server.crt:/opt/emqx/etc/certs/server.crt:ro
       - ./certs/server.key:/opt/emqx/etc/certs/server.key:ro
-    depends_on:
-      backend:
-        condition: service_healthy
     healthcheck:
-      test: ["CMD", "emqx", "ctl", "status"]
+      test:
+        [
+          "CMD-SHELL",
+          "emqx ctl listeners | awk '$$0==\"ssl:default\"{p=1;next} p&&$$0~/^[^[:space:]]/{p=0} p&&/listen_on[[:space:]]*:[[:space:]]*0.0.0.0:8883/{l=1} p&&/running[[:space:]]*:[[:space:]]*true/{r=1} END{exit (l&&r)?0:1}'",
+        ]
       interval: 10s
       timeout: 10s
       retries: 12

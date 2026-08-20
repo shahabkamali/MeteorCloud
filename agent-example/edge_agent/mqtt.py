@@ -102,16 +102,19 @@ class DeviceMqttSession:
         if client is None:
             return
         try:
-            client.publish(
+            info = client.publish(
                 self.status_topic,
                 payload=json.dumps({"status": "offline"}),
                 qos=STATUS_QOS,
                 retain=True,
             )
+            info.wait_for_publish(timeout=2.0)
+            if not info.is_published():
+                logger.debug("Could not publish MQTT offline status during stop")
         except Exception:
             logger.debug("Could not publish MQTT offline status during stop")
-        client.loop_stop()
         client.disconnect()
+        client.loop_stop()
         self._client = None
 
     def _configure_tls(self, client: mqtt.Client) -> None:

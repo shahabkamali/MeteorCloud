@@ -12,7 +12,7 @@ else
   PYTHON="${PYTHON:-python3}"
 fi
 
-COMPOSE="${MQTT_COMPOSE:-docker compose -f docker-compose.yml -f docker-compose.dev.yml}"
+COMPOSE="${MQTT_COMPOSE:-docker compose -f docker-compose.yml}"
 export MQTT_COMPOSE="$COMPOSE"
 export PLATFORM_URL="${PLATFORM_URL:-http://127.0.0.1:8000}"
 export MQTT_HOST="${MQTT_HOST:-127.0.0.1}"
@@ -20,8 +20,30 @@ export MQTT_PORT="${MQTT_PORT:-8883}"
 export MQTT_CA_FILE="${MQTT_CA_FILE:-$ROOT/certs/ca.crt}"
 export MQTT_ALLOW_BROKER_RESTART="${MQTT_ALLOW_BROKER_RESTART:-1}"
 
-test -f .env || cp .env.example .env
-test -f certs/server.crt || ./scripts/generate-local-mqtt-certs.sh
+if [[ ! -f .env && -f .env.example ]]; then
+  cp .env.example .env
+fi
+if [[ -z "${MQTT_INTERNAL_TOKEN:-}" && -f .env ]]; then
+  MQTT_INTERNAL_TOKEN="$(awk -F= '/^MQTT_INTERNAL_TOKEN=/{print substr($0, index($0,"=")+1); exit}' .env)"
+  export MQTT_INTERNAL_TOKEN
+fi
+if [[ -z "${MQTT_INTERNAL_TOKEN:-}" ]]; then
+  echo "error: MQTT_INTERNAL_TOKEN must be set (environment or .env)" >&2
+  exit 1
+fi
+./scripts/generate-local-mqtt-certs.sh
+
+dump_emqx() {
+  echo "==> EMQX diagnostics"
+  # shellcheck disable=SC2086
+  $COMPOSE ps || true
+  # shellcheck disable=SC2086
+  $COMPOSE logs emqx --tail 120 || true
+  # shellcheck disable=SC2086
+  $COMPOSE exec -T emqx ls -la /opt/emqx/etc/certs || true
+  # shellcheck disable=SC2086
+  $COMPOSE exec -T emqx emqx ctl listeners || true
+}
 
 echo "==> Starting postgres, redis, backend, emqx"
 BUILD_ARGS=()
@@ -29,7 +51,13 @@ if [[ "${MQTT_COMPOSE_BUILD:-}" == "1" ]]; then
   BUILD_ARGS+=(--build)
 fi
 # shellcheck disable=SC2086
-if ! $COMPOSE up -d "${BUILD_ARGS[@]}" --wait --wait-timeout 180 postgres redis backend emqx; then
+if $COMPOSE up --help 2>&1 | grep -q -- '--wait'; then
+  # shellcheck disable=SC2086
+  if ! $COMPOSE up -d "${BUILD_ARGS[@]}" --wait --wait-timeout 180 postgres redis backend emqx; then
+    dump_emqx
+    exit 1
+  fi
+else
   echo "==> Compose --wait unavailable; starting without --wait"
   # shellcheck disable=SC2086
   $COMPOSE up -d "${BUILD_ARGS[@]}" postgres redis backend emqx
@@ -45,7 +73,7 @@ cleanup() {
 trap cleanup EXIT
 
 echo "==> Waiting for backend and MQTT TLS"
-"$PYTHON" - <<'PY'
+if ! "$PYTHON" - <<'PY'
 from mqtt_live.config import load_config
 from mqtt_live.http import wait_http, wait_mqtt_tls
 
@@ -54,6 +82,11 @@ wait_http(f"{cfg.platform_url}/health", timeout_seconds=180)
 wait_mqtt_tls(cfg.mqtt_host, cfg.mqtt_port, cfg.mqtt_ca_file, timeout_seconds=180)
 print("backend and MQTT TLS are ready")
 PY
+then
+  echo "==> EMQX did not become reachable on MQTT TLS"
+  dump_emqx
+  exit 1
+fi
 
 echo "==> MQTT integration + ping/pong"
 "$PYTHON" -m pytest -q tests/mqtt_live

@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import os
 import stat
+
+import pytest
 
 from edge_agent.config import AgentConfig, load_config, save_config
 from edge_agent.credentials import (
@@ -10,6 +13,7 @@ from edge_agent.credentials import (
     read_registration_token_file,
     remove_file,
     write_device_token,
+    write_secret_file,
 )
 
 
@@ -28,6 +32,18 @@ def test_write_device_token_is_atomic_overwrite(agent_paths) -> None:
     leftovers = [
         p.name for p in agent_paths.token_path.parent.iterdir() if p.name.startswith(".tmp")
     ]
+    assert leftovers == []
+
+
+def test_write_secret_file_closes_fd_if_chmod_fails(tmp_path, monkeypatch) -> None:
+    def fail_chmod(_path: str | os.PathLike[str], _mode: int) -> None:
+        raise OSError("chmod failed")
+
+    monkeypatch.setattr(os, "chmod", fail_chmod)
+    target = tmp_path / "secret"
+    with pytest.raises(OSError, match="chmod failed"):
+        write_secret_file(target, "secret")
+    leftovers = [p.name for p in tmp_path.iterdir() if p.name.startswith(".tmp-secret-")]
     assert leftovers == []
 
 

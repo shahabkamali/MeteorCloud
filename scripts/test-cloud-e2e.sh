@@ -56,7 +56,10 @@ echo "==> Terraform apply + Ansible deploy ($INSTALLATION_NAME)"
 (cd "$ROOT/installer" && edge-installer apply "$CONFIG")
 applied=1
 
-"$PYTHON" - <<'PY'
+{
+  read -r PLATFORM_URL
+  read -r _mqtt_host
+} < <("$PYTHON" - <<'PY'
 import json
 import os
 import sys
@@ -68,17 +71,14 @@ if not path.is_file():
     sys.exit(f"missing {path}")
 data = json.loads(path.read_text())
 url = data.get("platform_url")
-ip = data.get("public_ip")
+ip = data.get("public_ip") or ""
 if not url:
     sys.exit("missing platform_url")
 print(url)
-if ip:
-    Path("/tmp/mqtt-e2e-host").write_text(ip)
-Path("/tmp/mqtt-e2e-url").write_text(url)
+print(ip)
 PY
-
-PLATFORM_URL="$(cat /tmp/mqtt-e2e-url)"
-MQTT_HOST="${MQTT_HOST:-$(cat /tmp/mqtt-e2e-host 2>/dev/null || true)}"
+)
+MQTT_HOST="${MQTT_HOST:-$_mqtt_host}"
 MQTT_PORT="${MQTT_PORT:-8883}"
 export PLATFORM_URL MQTT_HOST MQTT_PORT
 export MQTT_ALLOW_BROKER_RESTART=0

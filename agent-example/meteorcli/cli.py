@@ -202,14 +202,15 @@ def _persist_claimed_device(
     client: EdgeClient,
     poll: dict,
 ) -> None:
-    from edge_agent.credentials import write_device_token
+    from edge_agent.mqtt_config import mqtt_from_api_payload
+    from edge_agent.persist import persist_device_secrets
 
-    write_device_token(paths.token_path, poll["device_token"])
-    from edge_agent.mqtt_config import mqtt_from_api_payload, write_mqtt_config
-
-    mqtt = mqtt_from_api_payload(poll)
-    if mqtt is not None:
-        write_mqtt_config(paths.config_path.parent, mqtt)
+    persist_device_secrets(
+        paths.config_path.parent,
+        paths.token_path,
+        poll["device_token"],
+        mqtt_from_api_payload(poll),
+    )
     existing = _load(paths) or AgentConfig(server_url=client.server_url)
     existing.server_url = client.server_url
     existing.device_id = str(poll["device_id"])
@@ -569,12 +570,15 @@ def _cmd_run(args: argparse.Namespace) -> int:
     from edge_agent.mqtt import DeviceMqttSession
     from edge_agent.mqtt_config import read_mqtt_config
 
-    mqtt_config = read_mqtt_config(paths.config_path.parent)
-    if mqtt_config is not None and config.device_id:
-        mqtt_session = DeviceMqttSession(config.device_id, mqtt_config)
-        mqtt_session.start()
     logger.info("Starting heartbeat loop every %ss", interval)
     try:
+        try:
+            mqtt_config = read_mqtt_config(paths.config_path.parent)
+            if mqtt_config is not None and config.device_id:
+                mqtt_session = DeviceMqttSession(config.device_id, mqtt_config)
+                mqtt_session.start()
+        except Exception:
+            logger.exception("MQTT failed to start; continuing with heartbeats")
         run_loop(
             client,
             device_token,

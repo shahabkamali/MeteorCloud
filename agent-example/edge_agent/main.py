@@ -97,11 +97,14 @@ def _cmd_run(args: argparse.Namespace) -> int:
     from edge_agent.mqtt import DeviceMqttSession
     from edge_agent.mqtt_config import read_mqtt_config
 
-    mqtt_config = read_mqtt_config(paths.config_path.parent)
-    if mqtt_config is not None and config.device_id:
-        mqtt_session = DeviceMqttSession(config.device_id, mqtt_config)
-        mqtt_session.start()
     try:
+        try:
+            mqtt_config = read_mqtt_config(paths.config_path.parent)
+            if mqtt_config is not None and config.device_id:
+                mqtt_session = DeviceMqttSession(config.device_id, mqtt_config)
+                mqtt_session.start()
+        except Exception:
+            logger.exception("MQTT failed to start; continuing with heartbeats")
         run_loop(
             client,
             device_token,

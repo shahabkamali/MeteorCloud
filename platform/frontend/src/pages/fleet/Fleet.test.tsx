@@ -377,6 +377,33 @@ describe("Device detail", () => {
     await user.click(screen.getByRole("button", { name: /test connection/i }));
     expect(await screen.findByText(/connection test successful/i)).toBeInTheDocument();
     expect(screen.getByText(/round trip: 120 ms/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /test connection/i })).toBeEnabled();
+  });
+
+  it("disables Test Connection while the ping is in flight", async () => {
+    const user = userEvent.setup();
+    let resolvePing: (value: fleetApi.DevicePingResult) => void = () => {};
+    vi.mocked(fleetApi.getDevice).mockResolvedValue(device);
+    vi.mocked(fleetApi.pingDevice).mockImplementation(
+      () =>
+        new Promise<fleetApi.DevicePingResult>((resolve) => {
+          resolvePing = resolve;
+        }),
+    );
+
+    renderApp(["/organizations/org-1/devices/device-1"]);
+    const button = await screen.findByRole("button", { name: /test connection/i });
+    await user.click(button);
+    expect(button).toBeDisabled();
+    resolvePing({
+      command_id: "cmd-1",
+      status: "completed",
+      round_trip_ms: 10,
+      result: { message: "pong" },
+      message: null,
+    });
+    expect(await screen.findByText(/connection test successful/i)).toBeInTheDocument();
+    expect(button).toBeEnabled();
   });
 });
 

@@ -38,6 +38,42 @@ def test_insecure_tls_disabled_by_default(monkeypatch) -> None:
     assert tls_insecure_enabled() is True
 
 
+def test_stop_waits_for_offline_publish_then_disconnects() -> None:
+    from edge_agent.mqtt import DeviceMqttSession
+
+    calls: list[str] = []
+
+    class Info:
+        def wait_for_publish(self, timeout=None) -> None:
+            calls.append(f"wait:{timeout}")
+
+        def is_published(self) -> bool:
+            calls.append("is_published")
+            return True
+
+    class FakeMqttClient:
+        def publish(self, topic, payload, qos=0, retain=False):
+            calls.append("publish")
+            assert json.loads(payload) == {"status": "offline"}
+            return Info()
+
+        def disconnect(self) -> None:
+            calls.append("disconnect")
+
+        def loop_stop(self) -> None:
+            calls.append("loop_stop")
+
+    session = DeviceMqttSession(
+        "device-1",
+        MqttConfig(host="localhost", port=8883, username="u", password="p"),
+        tls_insecure=True,
+    )
+    session._client = FakeMqttClient()
+    session.stop()
+    assert calls == ["publish", "wait:2.0", "is_published", "disconnect", "loop_stop"]
+    assert session._client is None
+
+
 def test_register_stores_mqtt_secret_without_logging(agent_paths, caplog) -> None:
     client = FakeClient(
         register_response={
@@ -74,6 +110,21 @@ def test_mqtt_from_api_payload_requires_password() -> None:
         {"mqtt": {"host": "localhost", "port": 8883, "username": "u", "password": "p", "tls": True}}
     )
     assert cfg == MqttConfig(host="localhost", port=8883, username="u", password="p", tls=True)
+    assert mqtt_from_api_payload(
+        {"mqtt": {"host": "localhost", "username": "u", "password": "p", "tls": False}}
+    ) is None
+    assert (
+        mqtt_from_api_payload({"mqtt": {"host": "localhost", "username": "u", "password": "p"}}).tls
+        is True
+    )
+
+
+def test_read_mqtt_config_rejects_tls_disabled(tmp_path) -> None:
+    (tmp_path / "mqtt.json").write_text(
+        json.dumps({"username": "u", "password": "p", "tls": False}),
+        encoding="utf-8",
+    )
+    assert read_mqtt_config(tmp_path) is None
 
 
 def test_write_mqtt_config_permissions(tmp_path) -> None:
@@ -84,3 +135,108 @@ def test_write_mqtt_config_permissions(tmp_path) -> None:
     assert loaded is not None
     assert loaded.ca_cert == "CA"
     assert os.path.exists(tmp_path / "mqtt-ca.crt")
+
+
+def test_read_mqtt_config_missing_file_returns_none(tmp_path) -> None:
+    assert read_mqtt_config(tmp_path) is None
+
+
+def test_read_mqtt_config_invalid_json_returns_none(tmp_path) -> None:
+    (tmp_path / "mqtt.json").write_text("{not-json", encoding="utf-8")
+    assert read_mqtt_config(tmp_path) is None
+
+
+def test_read_mqtt_config_invalid_payload_returns_none(tmp_path) -> None:
+    (tmp_path / "mqtt.json").write_text("[]", encoding="utf-8")
+    assert read_mqtt_config(tmp_path) is None
+    (tmp_path / "mqtt.json").write_text(
+        json.dumps({"username": "u", "password": "p", "port": "nope"}),
+        encoding="utf-8",
+    )
+    assert read_mqtt_config(tmp_path) is None
+
+
+def test_run_continues_if_mqtt_config_read_fails(agent_paths, monkeypatch) -> None:
+    import argparse
+
+    from edge_agent import main as agent_main
+    from edge_agent.config import AgentConfig, save_config
+    from edge_agent.credentials import write_device_token
+
+    save_config(
+        agent_paths,
+        AgentConfig(
+            server_url="http://localhost:8000",
+            device_id="device-1",
+            organization_id="org-1",
+            name="edge-01",
+            heartbeat_interval_seconds=60,
+        ),
+    )
+    write_device_token(agent_paths.token_path, "dev_secret")
+    ran: list[str] = []
+    stopped: list[str] = []
+
+    class BoomSession:
+        def start(self) -> None:
+            raise AssertionError("should not start")
+
+        def stop(self) -> None:
+            stopped.append("stop")
+
+    def boom_read(_dir):
+        raise OSError("unreadable mqtt.json")
+
+    monkeypatch.setattr("edge_agent.mqtt_config.read_mqtt_config", boom_read)
+    monkeypatch.setattr("edge_agent.mqtt.DeviceMqttSession", lambda *_a, **_k: BoomSession())
+    monkeypatch.setattr("edge_agent.main.run_loop", lambda *_a, **_k: ran.append("hb"))
+    monkeypatch.setattr("edge_agent.main.EdgeClient", lambda _url: object())
+    args = argparse.Namespace(config_dir=str(agent_paths.config_path.parent), once=False)
+    assert agent_main._cmd_run(args) == 0
+    assert ran == ["hb"]
+    assert stopped == []
+
+
+def test_meteorcli_run_stops_mqtt_if_start_fails(agent_paths, monkeypatch) -> None:
+    import argparse
+
+    from edge_agent.config import AgentConfig, save_config
+    from edge_agent.credentials import write_device_token
+    from meteorcli import cli as meteorcli
+
+    save_config(
+        agent_paths,
+        AgentConfig(
+            server_url="http://localhost:8000",
+            device_id="device-1",
+            organization_id="org-1",
+            name="edge-01",
+            heartbeat_interval_seconds=60,
+        ),
+    )
+    write_device_token(agent_paths.token_path, "dev_secret")
+    ran: list[str] = []
+    stopped: list[str] = []
+
+    class BoomSession:
+        def start(self) -> None:
+            raise OSError("broker down")
+
+        def stop(self) -> None:
+            stopped.append("stop")
+
+    monkeypatch.setattr(
+        "edge_agent.mqtt_config.read_mqtt_config",
+        lambda _dir: MqttConfig(host="localhost", port=8883, username="u", password="p"),
+    )
+    monkeypatch.setattr("edge_agent.mqtt.DeviceMqttSession", lambda *_a, **_k: BoomSession())
+    monkeypatch.setattr("meteorcli.cli.run_loop", lambda *_a, **_k: ran.append("hb"))
+    monkeypatch.setattr("meteorcli.cli.EdgeClient", lambda _url: object())
+    args = argparse.Namespace(
+        config_dir=str(agent_paths.config_path.parent),
+        once=False,
+        interval=None,
+    )
+    assert meteorcli._cmd_run(args) == 0
+    assert ran == ["hb"]
+    assert stopped == ["stop"]

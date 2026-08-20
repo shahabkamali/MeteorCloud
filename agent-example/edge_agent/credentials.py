@@ -18,10 +18,16 @@ def write_secret_file(path: Path, value: str, *, mode: int = 0o600) -> None:
     try:
         os.chmod(tmp_name, mode)
         with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            fd = -1
             handle.write(value)
         os.replace(tmp_name, path)
         os.chmod(path, mode)
     except BaseException:
+        if fd >= 0:
+            try:
+                os.close(fd)
+            except OSError:
+                pass
         try:
             os.unlink(tmp_name)
         except OSError:
@@ -36,6 +42,9 @@ def write_device_token(path: Path, token: str) -> None:
 
 def read_device_token(path: Path) -> str | None:
     """Return the stored device token, or None when absent."""
+    from edge_agent.persist import recover_device_secrets
+
+    recover_device_secrets(path.parent)
     try:
         token = path.read_text(encoding="utf-8").strip()
     except FileNotFoundError:

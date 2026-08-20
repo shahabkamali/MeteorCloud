@@ -42,6 +42,7 @@ export function DeviceDetailPage() {
   const [name, setName] = useState<string | null>(null);
   const [rotatedToken, setRotatedToken] = useState<string | null>(null);
   const [pingResult, setPingResult] = useState<string | null>(null);
+  const [pinging, setPinging] = useState(false);
 
   const orgQuery = useQuery({
     queryKey: ["organization", organizationId, token],
@@ -150,6 +151,29 @@ export function DeviceDetailPage() {
     }
   }
 
+  async function onTestConnection() {
+    setError(null);
+    setPingResult(null);
+    setPinging(true);
+    try {
+      const result = await pingDevice(token!, organizationId, deviceId);
+      if (result.status === "completed") {
+        setPingResult(
+          `Connection test successful${
+            result.round_trip_ms != null ? ` Round trip: ${result.round_trip_ms} ms` : ""
+          }`,
+        );
+        await invalidate();
+      } else {
+        setError(result.message || "Connection test failed.");
+      }
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Connection test failed.");
+    } finally {
+      setPinging(false);
+    }
+  }
+
   return (
     <section className="mx-auto max-w-4xl space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -182,27 +206,7 @@ export function DeviceDetailPage() {
         </div>
         {canManage && (
           <div className="flex flex-wrap items-center gap-3">
-            <Button
-              onClick={async () => {
-                setError(null);
-                setPingResult(null);
-                try {
-                  const result = await pingDevice(token!, organizationId, deviceId);
-                  if (result.status === "completed") {
-                    setPingResult(
-                      `Connection test successful${
-                        result.round_trip_ms != null ? ` Round trip: ${result.round_trip_ms} ms` : ""
-                      }`,
-                    );
-                    await invalidate();
-                  } else {
-                    setError(result.message || "Connection test failed.");
-                  }
-                } catch (err) {
-                  setError(err instanceof ApiError ? err.message : "Connection test failed.");
-                }
-              }}
-            >
+            <Button onClick={onTestConnection} disabled={pinging}>
               Test Connection
             </Button>
             {pingResult && <p className="text-sm text-green-800">{pingResult}</p>}

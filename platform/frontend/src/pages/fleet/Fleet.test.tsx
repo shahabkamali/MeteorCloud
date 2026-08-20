@@ -282,6 +282,30 @@ describe("Devices list", () => {
     });
   });
 
+  it("refreshes devices and pending registrations", async () => {
+    const user = userEvent.setup();
+    vi.mocked(fleetApi.listDevices).mockResolvedValue({
+      items: [device],
+      total: 1,
+      page: 1,
+      page_size: 10,
+    });
+
+    renderApp(["/organizations/org-1/devices"]);
+    await screen.findByRole("link", { name: "edge-01" });
+    const initialDeviceCalls = vi.mocked(fleetApi.listDevices).mock.calls.length;
+    const initialTokenCalls = vi.mocked(fleetApi.listRegistrationTokens).mock.calls.length;
+
+    await user.click(screen.getByRole("button", { name: /refresh devices/i }));
+
+    await waitFor(() => {
+      expect(vi.mocked(fleetApi.listDevices).mock.calls.length).toBeGreaterThan(initialDeviceCalls);
+      expect(vi.mocked(fleetApi.listRegistrationTokens).mock.calls.length).toBeGreaterThan(
+        initialTokenCalls,
+      );
+    });
+  });
+
   it("deletes a device after confirmation", async () => {
     const user = userEvent.setup();
     vi.spyOn(window, "confirm").mockReturnValue(true);
@@ -374,44 +398,13 @@ describe("API keys", () => {
 
   it("approves a pending enrollment request", async () => {
     const user = userEvent.setup();
-    vi.mocked(fleetApi.listEnrollmentRequests).mockResolvedValue([
-      {
-        id: "req-1",
-        organization_id: "org-1",
-        status: "pending",
-        claim_secret_prefix: "clm_abcdef",
-        requested_name: "edge-warehouse",
-        assigned_name: null,
-        device_type_id: null,
-        device_group_id: null,
-        machine_id: "machine-xyz",
-        serial_number: null,
-        mac_addresses: [],
-        hostname: "edge-warehouse",
-        os_name: "Ubuntu",
-        os_version: null,
-        kernel_version: null,
-        architecture: "x86_64",
-        cpu_model: null,
-        cpu_cores: null,
-        memory_mb: null,
-        reviewed_by_user_id: null,
-        reviewed_at: null,
-        rejection_reason: null,
-        claimed_at: null,
-        device_id: null,
-        expires_at: null,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      },
-    ]);
-    vi.mocked(fleetApi.approveEnrollmentRequest).mockResolvedValue({
+    const pendingRequest = {
       id: "req-1",
       organization_id: "org-1",
-      status: "approved",
+      status: "pending" as const,
       claim_secret_prefix: "clm_abcdef",
       requested_name: "edge-warehouse",
-      assigned_name: "edge-warehouse",
+      assigned_name: null,
       device_type_id: null,
       device_group_id: null,
       machine_id: "machine-xyz",
@@ -425,14 +418,26 @@ describe("API keys", () => {
       cpu_model: null,
       cpu_cores: null,
       memory_mb: null,
-      reviewed_by_user_id: "user-1",
-      reviewed_at: new Date().toISOString(),
+      reviewed_by_user_id: null,
+      reviewed_at: null,
       rejection_reason: null,
       claimed_at: null,
       device_id: null,
       expires_at: null,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
+    };
+    vi.mocked(fleetApi.listEnrollmentRequests).mockResolvedValue([pendingRequest]);
+    vi.mocked(fleetApi.approveEnrollmentRequest).mockImplementation(async () => {
+      const approved = {
+        ...pendingRequest,
+        status: "approved" as const,
+        assigned_name: "edge-warehouse",
+        reviewed_by_user_id: "user-1",
+        reviewed_at: new Date().toISOString(),
+      };
+      vi.mocked(fleetApi.listEnrollmentRequests).mockResolvedValue([approved]);
+      return approved;
     });
 
     renderApp(["/organizations/org-1/api-keys"]);
@@ -449,5 +454,7 @@ describe("API keys", () => {
         expect.objectContaining({ name: "edge-warehouse" }),
       );
     });
+    expect(await screen.findByText(/awaiting device/i)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^approve$/i })).not.toBeInTheDocument();
   });
 });

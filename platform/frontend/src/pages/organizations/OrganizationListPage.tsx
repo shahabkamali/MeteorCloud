@@ -2,6 +2,7 @@ import { Link } from "react-router-dom";
 
 import { Button } from "@/components/ui/button";
 import { useOrganizationContext } from "@/context/OrganizationContext";
+import { formatDateTime } from "@/lib/utils";
 
 export function OrganizationListPage() {
   const { organizations, isLoading, selectOrganization } = useOrganizationContext();
@@ -45,7 +46,8 @@ export function OrganizationListPage() {
                   {organization.name}
                 </Link>
                 <p className="mt-1 text-sm text-muted-foreground">
-                  {organization.slug} · role: {organization.current_user_role}
+                  {organization.slug} · role: {organization.current_user_role} · created{" "}
+                  {formatDateTime(organization.created_at)}
                 </p>
                 {organization.description && (
                   <p className="mt-2 text-sm text-muted-foreground">{organization.description}</p>

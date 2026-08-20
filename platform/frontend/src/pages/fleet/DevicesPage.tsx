@@ -8,7 +8,6 @@ import {
   listDeviceGroups,
   listDeviceTypes,
   listDevices,
-  listEnrollmentRequests,
   listRegistrationTokens,
   revokeRegistrationToken,
   type ConnectivityStatus,
@@ -20,11 +19,13 @@ import { getOrganization } from "@/api/organizations";
 import { useAuth } from "@/auth/AuthContext";
 import { FleetNav } from "@/components/fleet/FleetNav";
 import { OneTimeSecretDialog } from "@/components/fleet/OneTimeSecretDialog";
+import { PendingEnrollmentRequests } from "@/components/fleet/PendingEnrollmentRequests";
 import { StatusBadge } from "@/components/fleet/StatusBadge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { canManageFleet } from "@/lib/permissions";
+import { formatDateTime } from "@/lib/utils";
 
 const PAGE_SIZE = 10;
 
@@ -76,11 +77,6 @@ export function DevicesPage() {
   const tokensQuery = useQuery({
     queryKey: ["registration-tokens", organizationId, token],
     queryFn: () => listRegistrationTokens(token!, organizationId),
-    enabled: Boolean(token && organizationId),
-  });
-  const enrollmentRequestsQuery = useQuery({
-    queryKey: ["enrollment-requests", organizationId, token],
-    queryFn: () => listEnrollmentRequests(token!, organizationId, "pending"),
     enabled: Boolean(token && organizationId),
   });
 
@@ -268,16 +264,14 @@ export function DevicesPage() {
 
       {formError && <p className="text-sm text-red-700">{formError}</p>}
 
-      {(enrollmentRequestsQuery.data ?? []).length > 0 && (
-        <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-          <p>
-            {(enrollmentRequestsQuery.data ?? []).length} device(s) requested enrollment
-            and are waiting for review.
-          </p>
-          <Button variant="secondary" size="sm" asChild>
-            <Link to={`/organizations/${organizationId}/api-keys`}>Review requests</Link>
-          </Button>
-        </div>
+      {token && (
+        <PendingEnrollmentRequests
+          organizationId={organizationId}
+          token={token}
+          canManage={canManage}
+          hideWhenEmpty
+          onError={setFormError}
+        />
       )}
 
       {pendingTokens.length > 0 && (
@@ -293,6 +287,7 @@ export function DevicesPage() {
                   <th className="px-4 py-3 font-semibold">Type</th>
                   <th className="px-4 py-3 font-semibold">Group</th>
                   <th className="px-4 py-3 font-semibold">Token</th>
+                  <th className="px-4 py-3 font-semibold">Created</th>
                   <th className="px-4 py-3 font-semibold">Status</th>
                   {canManage && <th className="px-4 py-3 font-semibold">Actions</th>}
                 </tr>
@@ -308,6 +303,9 @@ export function DevicesPage() {
                       {entry.device_group_id ? groupNames.get(entry.device_group_id) ?? "—" : "—"}
                     </td>
                     <td className="px-4 py-3 font-mono text-xs">{entry.token_prefix}…</td>
+                    <td className="px-4 py-3 text-muted-foreground">
+                      {formatDateTime(entry.created_at)}
+                    </td>
                     <td className="px-4 py-3">
                       <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800">
                         Awaiting registration
@@ -416,6 +414,7 @@ export function DevicesPage() {
                   Last seen {sort === "last_seen_at" ? (order === "asc" ? "↑" : "↓") : ""}
                 </button>
               </th>
+              <th className="px-4 py-3 font-semibold">Registered</th>
               <th className="px-4 py-3 font-semibold">Enabled</th>
               {canManage && <th className="px-4 py-3 font-semibold">Actions</th>}
             </tr>
@@ -425,7 +424,7 @@ export function DevicesPage() {
               <tr>
                 <td
                   className="px-4 py-6 text-center text-muted-foreground"
-                  colSpan={canManage ? 6 : 5}
+                  colSpan={canManage ? 7 : 6}
                 >
                   Loading devices…
                 </td>
@@ -450,8 +449,11 @@ export function DevicesPage() {
                   </td>
                   <td className="px-4 py-3 text-muted-foreground">
                     {device.last_seen_at
-                      ? new Date(device.last_seen_at).toLocaleString()
+                      ? formatDateTime(device.last_seen_at)
                       : "Never"}
+                  </td>
+                  <td className="px-4 py-3 text-muted-foreground">
+                    {formatDateTime(device.registered_at ?? device.created_at)}
                   </td>
                   <td className="px-4 py-3">{device.is_enabled ? "Yes" : "No"}</td>
                   {canManage && (
@@ -472,7 +474,7 @@ export function DevicesPage() {
               <tr>
                 <td
                   className="px-4 py-6 text-center text-muted-foreground"
-                  colSpan={canManage ? 6 : 5}
+                  colSpan={canManage ? 7 : 6}
                 >
                   No devices found.
                 </td>

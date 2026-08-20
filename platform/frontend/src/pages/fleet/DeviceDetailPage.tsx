@@ -21,6 +21,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { canManageFleet } from "@/lib/permissions";
+import { formatDateTime } from "@/lib/utils";
 
 function Detail({ label, value }: { label: string; value: string | null | undefined }) {
   return (
@@ -176,11 +177,12 @@ export function DeviceDetailPage() {
         <Detail label="MAC addresses" value={device.mac_addresses.join(", ")} />
         <Detail
           label="Last seen"
-          value={device.last_seen_at ? new Date(device.last_seen_at).toLocaleString() : "Never"}
+          value={device.last_seen_at ? formatDateTime(device.last_seen_at) : "Never"}
         />
+        <Detail label="Created" value={formatDateTime(device.created_at)} />
         <Detail
           label="Registered"
-          value={device.registered_at ? new Date(device.registered_at).toLocaleString() : null}
+          value={device.registered_at ? formatDateTime(device.registered_at) : null}
         />
         <Detail label="Credential prefix" value={device.credential_prefix} />
       </div>

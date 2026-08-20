@@ -219,6 +219,26 @@ def _persist_claimed_device(
     chown_config_dir(paths.config_path.parent)
 
 
+def _sync_stored_claim(paths: CliPaths, client: EdgeClient, pending: dict) -> str:
+    """Check a stored claim against the API. Terminal states clear the local secret."""
+    try:
+        polled = client.enroll_poll(
+            request_id=pending["request_id"],
+            claim_secret=pending["claim_secret"],
+        )
+    except AgentApiError:
+        return "pending"
+    status = str(polled.get("status") or "pending")
+    if status in {"rejected", "expired"}:
+        remove_secret(paths.claim_secret_path)
+        return status
+    if status == "approved" and polled.get("device_token"):
+        _persist_claimed_device(paths, client, polled)
+        _print_claimed(paths, polled)
+        return "approved"
+    return "pending"
+
+
 def _load_pending_claim(paths: CliPaths) -> dict | None:
     raw = read_secret(paths.claim_secret_path)
     if not raw:
@@ -354,20 +374,28 @@ def _cmd_request(args: argparse.Namespace) -> int:
         )
         return 2
 
+    client = EdgeClient(server)
     pending = _load_pending_claim(paths)
     if pending is not None and not args.new:
+        status = _sync_stored_claim(paths, client, pending)
+        if status == "approved":
+            return 0
+        if status == "pending":
+            print(
+                f"error: a pending enrollment request already exists ({pending['request_id']}).",
+                file=sys.stderr,
+            )
+            print(
+                f"Run '{PROG} claim' to collect the token after approval, "
+                f"or '{PROG} request-token --new' to submit a different request.",
+                file=sys.stderr,
+            )
+            return 2
         print(
-            f"error: a pending enrollment request already exists ({pending['request_id']}).",
+            f"Previous enrollment request was {status}. Submitting a new request.",
             file=sys.stderr,
         )
-        print(
-            f"Run '{PROG} claim' to collect the token after approval, "
-            f"or '{PROG} request-token --new' to submit a different request.",
-            file=sys.stderr,
-        )
-        return 2
 
-    client = EdgeClient(server)
     inventory = collect_inventory()
     try:
         submitted = client.enroll_request(api_key=api_key, inventory=inventory, name=args.name)

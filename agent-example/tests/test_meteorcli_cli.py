@@ -255,6 +255,50 @@ def test_request_refuses_second_submit_while_pending(tmp_path, monkeypatch, caps
     assert code == 2
     assert "pending enrollment request already exists" in capsys.readouterr().err
     assert client.enroll_request_calls == []
+    assert client.enroll_poll_calls == [
+        {"request_id": "req-1", "claim_secret": "clm_secret-value"}
+    ]
+
+
+def test_request_after_rejection_submits_again(tmp_path, monkeypatch, capsys) -> None:
+    config_dir = tmp_path / "meteorcli"
+    config_dir.mkdir()
+    (config_dir / "claim-secret").write_text(
+        '{"request_id": "req-1", "claim_secret": "clm_secret-value"}',
+        encoding="utf-8",
+    )
+    client = FakeClient()
+    client.enroll_poll_responses = [
+        {"status": "rejected", "rejection_reason": "Unknown hardware", "poll_interval_seconds": 0}
+    ]
+    client.enroll_request_response = {
+        "request_id": "req-2",
+        "claim_secret": "clm_new-secret",
+        "status": "pending",
+        "poll_interval_seconds": 1,
+        "expires_at": None,
+    }
+    monkeypatch.setattr(meteorcli, "EdgeClient", lambda server_url, **_: client)
+
+    code = meteorcli.main(
+        [
+            "--config-dir",
+            str(config_dir),
+            "request-token",
+            "--server",
+            "http://localhost:8000",
+            "--api-key",
+            "key_abc",
+            "--wait",
+            "0",
+        ]
+    )
+    assert code == 0
+    err = capsys.readouterr().err
+    assert "Previous enrollment request was rejected" in err
+    assert client.enroll_request_calls
+    claim = (config_dir / "claim-secret").read_text(encoding="utf-8")
+    assert "req-2" in claim
 
 
 def test_request_alias_still_works(tmp_path, monkeypatch) -> None:

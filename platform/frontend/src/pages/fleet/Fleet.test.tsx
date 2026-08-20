@@ -215,6 +215,45 @@ describe("Add device flow", () => {
     expect(await screen.findByText("warehouse-sensor")).toBeInTheDocument();
     expect(screen.getByText(/awaiting registration/i)).toBeInTheDocument();
   });
+
+  it("shows pending enrollment requests on the devices page", async () => {
+    vi.mocked(fleetApi.listEnrollmentRequests).mockResolvedValue([
+      {
+        id: "req-1",
+        organization_id: "org-1",
+        status: "pending",
+        claim_secret_prefix: "clm_abcdef",
+        requested_name: "edge-01",
+        assigned_name: null,
+        device_type_id: null,
+        device_group_id: null,
+        machine_id: "machine-xyz",
+        serial_number: null,
+        mac_addresses: [],
+        hostname: "edge-01",
+        os_name: "Ubuntu",
+        os_version: null,
+        kernel_version: null,
+        architecture: "x86_64",
+        cpu_model: null,
+        cpu_cores: null,
+        memory_mb: null,
+        reviewed_by_user_id: null,
+        reviewed_at: null,
+        rejection_reason: null,
+        claimed_at: null,
+        device_id: null,
+        expires_at: null,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      },
+    ]);
+
+    renderApp(["/organizations/org-1/devices"]);
+    expect(await screen.findByRole("heading", { name: /pending enrollment requests/i })).toBeInTheDocument();
+    expect(screen.getAllByText("edge-01").length).toBeGreaterThan(0);
+    expect(screen.getByRole("columnheader", { name: /requested/i })).toBeInTheDocument();
+  });
 });
 
 describe("Devices list", () => {
@@ -397,6 +436,7 @@ describe("API keys", () => {
     });
 
     renderApp(["/organizations/org-1/api-keys"]);
+    expect(await screen.findByRole("columnheader", { name: /requested/i })).toBeInTheDocument();
     expect(await screen.findByRole("button", { name: /^approve$/i })).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: /^approve$/i }));
     await user.click(screen.getByRole("button", { name: /confirm approval/i }));

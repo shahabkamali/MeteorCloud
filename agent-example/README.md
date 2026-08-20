@@ -113,8 +113,9 @@ meteorcli claim
 ```
 
 `meteorcli request-token` will refuse to create a second request while a claim is
-pending; pass `--new` only if you intend to replace it. Use `meteorcli run`
-after the token is stored.
+still pending on the server; pass `--new` only if you intend to replace it.
+After a rejection or expiry, run `request-token` again (no `--new` needed).
+Use `meteorcli run` after the token is stored.
 
 ## Send heartbeats
 

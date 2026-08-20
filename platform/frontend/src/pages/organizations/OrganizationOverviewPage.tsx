@@ -5,6 +5,7 @@ import { getOrganization } from "@/api/organizations";
 import { useAuth } from "@/auth/AuthContext";
 import { Button } from "@/components/ui/button";
 import { canManageMembers, canUpdateOrganization } from "@/lib/permissions";
+import { formatDateTime } from "@/lib/utils";
 
 export function OrganizationOverviewPage() {
   const { organizationId = "" } = useParams();
@@ -73,7 +74,7 @@ export function OrganizationOverviewPage() {
           <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
             Created
           </p>
-          <p className="mt-1 text-sm">{new Date(organization.created_at).toLocaleString()}</p>
+          <p className="mt-1 text-sm">{formatDateTime(organization.created_at)}</p>
         </div>
       </div>
 

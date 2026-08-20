@@ -16,6 +16,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { assignableRoles, canManageMembers } from "@/lib/permissions";
+import { formatDateTime } from "@/lib/utils";
 
 export function OrganizationMembersPage() {
   const { organizationId = "" } = useParams();
@@ -186,7 +187,7 @@ export function OrganizationMembersPage() {
                     )}
                   </td>
                   <td className="px-4 py-3 text-muted-foreground">
-                    {new Date(member.created_at).toLocaleDateString()}
+                    {formatDateTime(member.created_at)}
                   </td>
                   {canManage && (
                     <td className="px-4 py-3">

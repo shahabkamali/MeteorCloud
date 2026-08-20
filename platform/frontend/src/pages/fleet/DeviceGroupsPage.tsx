@@ -16,6 +16,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { canManageFleet } from "@/lib/permissions";
+import { formatDateTime } from "@/lib/utils";
 
 export function DeviceGroupsPage() {
   const { organizationId = "" } = useParams();
@@ -157,6 +158,9 @@ export function DeviceGroupsPage() {
                   {group.description && (
                     <p className="text-sm text-muted-foreground">{group.description}</p>
                   )}
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Created {formatDateTime(group.created_at)}
+                  </p>
                 </div>
               )}
               {canManage && editingId !== group.id && (

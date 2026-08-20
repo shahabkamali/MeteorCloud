@@ -90,6 +90,9 @@ const device = {
   registered_at: new Date().toISOString(),
   created_at: new Date().toISOString(),
   updated_at: new Date().toISOString(),
+  mqtt_configured: true,
+  mqtt_status: "online" as const,
+  mqtt_status_at: new Date().toISOString(),
 };
 
 beforeEach(() => {
@@ -356,6 +359,24 @@ describe("Device detail", () => {
 
     const dialog = await screen.findByRole("dialog");
     expect(within(dialog).getByText("dev_new-secret")).toBeInTheDocument();
+  });
+
+  it("sends an MQTT ping from the device detail page", async () => {
+    const user = userEvent.setup();
+    vi.mocked(fleetApi.getDevice).mockResolvedValue(device);
+    vi.mocked(fleetApi.pingDevice).mockResolvedValue({
+      command_id: "cmd-1",
+      status: "completed",
+      round_trip_ms: 120,
+      result: { message: "pong" },
+      message: null,
+    });
+
+    renderApp(["/organizations/org-1/devices/device-1"]);
+    expect(await screen.findByText("MQTT Connection")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /test connection/i }));
+    expect(await screen.findByText(/connection test successful/i)).toBeInTheDocument();
+    expect(screen.getByText(/round trip: 120 ms/i)).toBeInTheDocument();
   });
 });
 

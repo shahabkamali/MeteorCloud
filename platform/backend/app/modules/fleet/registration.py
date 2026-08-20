@@ -25,6 +25,7 @@ from app.modules.fleet.schemas import (
 )
 from app.modules.fleet.status import connectivity_status
 from app.modules.fleet.tokens import generate_device_token, hash_token
+from app.modules.mqtt.credentials import issue_mqtt_credentials
 
 
 class RegistrationService:
@@ -82,6 +83,8 @@ class RegistrationService:
         token.use_count += 1
         self.tokens.update(token)
 
+        mqtt = issue_mqtt_credentials(self.session, device, self.settings)
+
         self.session.commit()
         self.session.refresh(device)
 
@@ -91,6 +94,7 @@ class RegistrationService:
             organization_id=device.organization_id,
             name=device.name,
             heartbeat_interval_seconds=self.settings.device_heartbeat_interval_seconds,
+            mqtt=mqtt,
         )
 
     def _validate_token(self, plaintext: str) -> RegistrationToken:
@@ -122,12 +126,7 @@ class RegistrationService:
         return token
 
     def _resolve_name(self, payload: AgentRegisterRequest, identity: DeviceIdentity) -> str:
-        candidate = (
-            payload.name
-            or payload.hostname
-            or identity.machine_id
-            or identity.serial_number
-        )
+        candidate = payload.name or payload.hostname or identity.machine_id or identity.serial_number
         if candidate:
             return candidate.strip()[:255]
         return "unnamed-device"

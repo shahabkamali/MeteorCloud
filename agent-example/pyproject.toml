@@ -8,9 +8,9 @@ version = "0.1.0"
 description = "Reference Linux agent for the Edge Platform fleet"
 readme = "README.md"
 requires-python = ">=3.11"
-# The reference agent intentionally depends only on the Python standard library
-# so it can run on minimal Linux devices without installing packages.
-dependencies = []
+dependencies = [
+  "paho-mqtt>=2.1.0",
+]
 
 [project.optional-dependencies]
 dev = [

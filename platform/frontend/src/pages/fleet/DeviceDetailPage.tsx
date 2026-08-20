@@ -7,6 +7,7 @@ import {
   getDevice,
   listDeviceGroups,
   listDeviceTypes,
+  pingDevice,
   revokeDeviceCredential,
   rotateDeviceCredential,
   setDeviceEnabled,
@@ -40,6 +41,7 @@ export function DeviceDetailPage() {
   const [error, setError] = useState<string | null>(null);
   const [name, setName] = useState<string | null>(null);
   const [rotatedToken, setRotatedToken] = useState<string | null>(null);
+  const [pingResult, setPingResult] = useState<string | null>(null);
 
   const orgQuery = useQuery({
     queryKey: ["organization", organizationId, token],
@@ -164,6 +166,49 @@ export function DeviceDetailPage() {
       </div>
 
       {error && <p className="text-sm text-red-700">{error}</p>}
+
+      <div className="space-y-3 rounded-lg border border-border bg-white/80 p-6 shadow-sm">
+        <h2 className="text-lg font-semibold">MQTT Connection</h2>
+        <div className="grid gap-4 sm:grid-cols-3">
+          <Detail label="MQTT configured" value={device.mqtt_configured ? "yes" : "no"} />
+          <Detail
+            label="Last MQTT status"
+            value={device.mqtt_status ?? "unknown"}
+          />
+          <Detail
+            label="Last status timestamp"
+            value={device.mqtt_status_at ? formatDateTime(device.mqtt_status_at) : "—"}
+          />
+        </div>
+        {canManage && (
+          <div className="flex flex-wrap items-center gap-3">
+            <Button
+              onClick={async () => {
+                setError(null);
+                setPingResult(null);
+                try {
+                  const result = await pingDevice(token!, organizationId, deviceId);
+                  if (result.status === "completed") {
+                    setPingResult(
+                      `Connection test successful${
+                        result.round_trip_ms != null ? ` Round trip: ${result.round_trip_ms} ms` : ""
+                      }`,
+                    );
+                    await invalidate();
+                  } else {
+                    setError(result.message || "Connection test failed.");
+                  }
+                } catch (err) {
+                  setError(err instanceof ApiError ? err.message : "Connection test failed.");
+                }
+              }}
+            >
+              Test Connection
+            </Button>
+            {pingResult && <p className="text-sm text-green-800">{pingResult}</p>}
+          </div>
+        )}
+      </div>
 
       <div className="grid gap-4 rounded-lg border border-border bg-white/80 p-6 shadow-sm sm:grid-cols-2">
         <Detail label="Machine ID" value={device.machine_id} />

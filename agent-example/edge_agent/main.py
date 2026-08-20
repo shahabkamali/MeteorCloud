@@ -93,6 +93,14 @@ def _cmd_run(args: argparse.Namespace) -> int:
         return 0
 
     logger.info("Starting heartbeat loop every %ss", config.heartbeat_interval_seconds)
+    mqtt_session = None
+    from edge_agent.mqtt import DeviceMqttSession
+    from edge_agent.mqtt_config import read_mqtt_config
+
+    mqtt_config = read_mqtt_config(paths.config_path.parent)
+    if mqtt_config is not None and config.device_id:
+        mqtt_session = DeviceMqttSession(config.device_id, mqtt_config)
+        mqtt_session.start()
     try:
         run_loop(
             client,
@@ -105,6 +113,9 @@ def _cmd_run(args: argparse.Namespace) -> int:
         return 1
     except KeyboardInterrupt:  # pragma: no cover - interactive only
         logger.info("Stopping heartbeat loop.")
+    finally:
+        if mqtt_session is not None:
+            mqtt_session.stop()
     return 0
 
 
@@ -145,9 +156,7 @@ def build_parser() -> argparse.ArgumentParser:
     register_parser.set_defaults(func=_cmd_register)
 
     run_parser = subparsers.add_parser("run", help="Send heartbeats.")
-    run_parser.add_argument(
-        "--once", action="store_true", help="Send a single heartbeat and exit."
-    )
+    run_parser.add_argument("--once", action="store_true", help="Send a single heartbeat and exit.")
     run_parser.set_defaults(func=_cmd_run)
 
     info_parser = subparsers.add_parser("info", help="Show persisted configuration.")

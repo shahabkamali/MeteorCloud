@@ -8,7 +8,7 @@ custom metadata); every other attribute is an explicit column.
 from __future__ import annotations
 
 import uuid
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
 from sqlalchemy import (
@@ -20,6 +20,7 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    func,
 )
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
@@ -230,6 +231,12 @@ class Device(Base, UUIDPrimaryKeyMixin, TimestampMixin):
         nullable=True,
     )
 
+    mqtt_status: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    mqtt_status_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+
 
 class EnrollmentApiKey(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     """An organization-scoped API key used by the CLI to submit device-initiated
@@ -379,6 +386,62 @@ class DeviceEnrollmentRequest(Base, UUIDPrimaryKeyMixin, TimestampMixin):
         nullable=True,
     )
     expires_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+
+
+class DeviceMqttCredential(Base, TimestampMixin):
+    """Per-device MQTT username/password. Only the password hash is stored."""
+
+    __tablename__ = "device_mqtt_credentials"
+
+    device_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("devices.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    password_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    revoked_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+
+
+class DeviceCommand(Base, UUIDPrimaryKeyMixin):
+    """Minimal ping command record. Not a generic command framework."""
+
+    __tablename__ = "device_commands"
+    __table_args__ = (
+        Index("ix_device_commands_organization_id", "organization_id"),
+        Index("ix_device_commands_device_id", "device_id"),
+    )
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("organizations.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    device_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("devices.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    type: Mapped[str] = mapped_column(String(32), nullable=False, default="ping")
+    status: Mapped[str] = mapped_column(
+        String(16),
+        nullable=False,
+        default="pending",
+        server_default="pending",
+    )
+    result: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(UTC),
+        server_default=func.now(),
+        nullable=False,
+    )
+    completed_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True),
         nullable=True,
     )

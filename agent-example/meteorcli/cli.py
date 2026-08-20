@@ -79,8 +79,7 @@ def _finish_config_write(paths: CliPaths) -> None:
     chown_config_dir(paths.config_path.parent)
     if os.environ.get("SUDO_USER") and os.geteuid() == 0:
         print(
-            f"note: sudo is not required; config is stored for {os.environ['SUDO_USER']} "
-            f"at {paths.config_path.parent}",
+            f"note: sudo is not required; config is stored for {os.environ['SUDO_USER']} at {paths.config_path.parent}",
             file=sys.stderr,
         )
 
@@ -136,8 +135,7 @@ def _cmd_config(args: argparse.Namespace) -> int:
 
     if not domain and not api_base and not api_key:
         print(
-            f"error: provide --domain, --api-base, and/or --api-key "
-            f"(or {ENV_DOMAIN}/{ENV_API_KEY}).",
+            f"error: provide --domain, --api-base, and/or --api-key (or {ENV_DOMAIN}/{ENV_API_KEY}).",
             file=sys.stderr,
         )
         return 2
@@ -157,8 +155,7 @@ def _cmd_register(args: argparse.Namespace) -> int:
     server = _resolve_server(args, config)
     if not server:
         print(
-            f"error: a server URL is required "
-            f"(use --server, {ENV_SERVER}, or '{PROG} config --domain').",
+            f"error: a server URL is required (use --server, {ENV_SERVER}, or '{PROG} config --domain').",
             file=sys.stderr,
         )
         return 2
@@ -208,6 +205,11 @@ def _persist_claimed_device(
     from edge_agent.credentials import write_device_token
 
     write_device_token(paths.token_path, poll["device_token"])
+    from edge_agent.mqtt_config import mqtt_from_api_payload, write_mqtt_config
+
+    mqtt = mqtt_from_api_payload(poll)
+    if mqtt is not None:
+        write_mqtt_config(paths.config_path.parent, mqtt)
     existing = _load(paths) or AgentConfig(server_url=client.server_url)
     existing.server_url = client.server_url
     existing.device_id = str(poll["device_id"])
@@ -328,8 +330,7 @@ def _poll_enrollment(
             if error.status == 429:
                 polls += 1
                 print(
-                    f"Server asked to slow down; waiting {RATE_LIMIT_BACKOFF_SECONDS}s "
-                    "before the next poll…",
+                    f"Server asked to slow down; waiting {RATE_LIMIT_BACKOFF_SECONDS}s before the next poll…",
                     file=sys.stderr,
                 )
                 if wait_seconds == 0 or polls >= poll_cap or time.monotonic() >= deadline:
@@ -359,8 +360,7 @@ def _cmd_request(args: argparse.Namespace) -> int:
     server = _resolve_server(args, config)
     if not server:
         print(
-            f"error: a server URL is required "
-            f"(use --server, {ENV_SERVER}, or '{PROG} config --domain').",
+            f"error: a server URL is required (use --server, {ENV_SERVER}, or '{PROG} config --domain').",
             file=sys.stderr,
         )
         return 2
@@ -368,8 +368,7 @@ def _cmd_request(args: argparse.Namespace) -> int:
     api_key = _resolve_api_key(args, paths)
     if not api_key:
         print(
-            f"error: an API key is required "
-            f"(use --api-key, {ENV_API_KEY}, or '{PROG} config --api-key').",
+            f"error: an API key is required (use --api-key, {ENV_API_KEY}, or '{PROG} config --api-key').",
             file=sys.stderr,
         )
         return 2
@@ -439,8 +438,7 @@ def _cmd_claim(args: argparse.Namespace) -> int:
     server = _resolve_server(args, config)
     if not server:
         print(
-            f"error: a server URL is required "
-            f"(use --server, {ENV_SERVER}, or '{PROG} config --domain').",
+            f"error: a server URL is required (use --server, {ENV_SERVER}, or '{PROG} config --domain').",
             file=sys.stderr,
         )
         return 2
@@ -457,10 +455,7 @@ def _cmd_claim(args: argparse.Namespace) -> int:
     client = EdgeClient(server)
     wait_seconds = max(0, int(args.wait))
     if wait_seconds > 0:
-        print(
-            f"Checking enrollment request {pending['request_id']} "
-            f"(waiting up to {wait_seconds}s)…"
-        )
+        print(f"Checking enrollment request {pending['request_id']} (waiting up to {wait_seconds}s)…")
     return _poll_enrollment(
         paths,
         client,
@@ -479,8 +474,7 @@ def _cmd_test(args: argparse.Namespace) -> int:
     server = _resolve_server(args, config)
     if not server:
         print(
-            f"error: a server URL is required "
-            f"(use --server, {ENV_SERVER}, or '{PROG} config --domain').",
+            f"error: a server URL is required (use --server, {ENV_SERVER}, or '{PROG} config --domain').",
             file=sys.stderr,
         )
         if os.geteuid() != 0 and Path("/etc/meteorcli/config.json").exists():
@@ -508,8 +502,7 @@ def _cmd_test(args: argparse.Namespace) -> int:
     if not api_key:
         print("API key:        MISSING")
         print(
-            f"error: an API key is required "
-            f"(use --api-key, {ENV_API_KEY}, or '{PROG} config --api-key').",
+            f"error: an API key is required (use --api-key, {ENV_API_KEY}, or '{PROG} config --api-key').",
             file=sys.stderr,
         )
         return 1
@@ -540,16 +533,14 @@ def _load_or_fail(paths: CliPaths) -> tuple[AgentConfig, str] | None:
     config = _load(paths)
     if config is None or not config.device_id:
         print(
-            f"error: this device is not registered. "
-            f"Run '{PROG} register' or '{PROG} request-token' first.",
+            f"error: this device is not registered. Run '{PROG} register' or '{PROG} request-token' first.",
             file=sys.stderr,
         )
         return None
     device_token = read_device_token(paths.token_path)
     if device_token is None:
         print(
-            f"error: device credential is missing. "
-            f"Re-register with '{PROG} register' or '{PROG} request-token'.",
+            f"error: device credential is missing. Re-register with '{PROG} register' or '{PROG} request-token'.",
             file=sys.stderr,
         )
         return None
@@ -574,6 +565,14 @@ def _cmd_run(args: argparse.Namespace) -> int:
         return 0
 
     interval = args.interval or config.heartbeat_interval_seconds
+    mqtt_session = None
+    from edge_agent.mqtt import DeviceMqttSession
+    from edge_agent.mqtt_config import read_mqtt_config
+
+    mqtt_config = read_mqtt_config(paths.config_path.parent)
+    if mqtt_config is not None and config.device_id:
+        mqtt_session = DeviceMqttSession(config.device_id, mqtt_config)
+        mqtt_session.start()
     logger.info("Starting heartbeat loop every %ss", interval)
     try:
         run_loop(
@@ -587,6 +586,9 @@ def _cmd_run(args: argparse.Namespace) -> int:
         return 1
     except KeyboardInterrupt:  # pragma: no cover - interactive only
         logger.info("Stopping heartbeat loop.")
+    finally:
+        if mqtt_session is not None:
+            mqtt_session.stop()
     return 0
 
 
@@ -607,6 +609,10 @@ def _cmd_status(args: argparse.Namespace) -> int:
     print(f"Name:           {config.name if config and config.name else '—'}")
     print(f"Heartbeat:      every {config.heartbeat_interval_seconds if config else 60}s")
     print(f"Credential:     {'present' if has_credential else 'MISSING'}")
+    from edge_agent.mqtt_config import read_mqtt_config
+
+    mqtt_ok = read_mqtt_config(paths.config_path.parent) is not None
+    print(f"MQTT:           {'configured' if mqtt_ok else 'not configured'}")
     pending = _load_pending_claim(paths)
     if pending is not None:
         print(f"Pending claim:  {pending['request_id']} (run '{PROG} claim')")
@@ -689,8 +695,7 @@ def build_parser() -> argparse.ArgumentParser:
         "test",
         help="Check that the server is reachable and the API key is valid.",
         description=(
-            "Reach the control plane and authenticate with the stored API key. "
-            "Does not create an enrollment request."
+            "Reach the control plane and authenticate with the stored API key. Does not create an enrollment request."
         ),
     )
     test_parser.add_argument(
@@ -778,10 +783,7 @@ def build_parser() -> argparse.ArgumentParser:
         type=int,
         default=DEFAULT_ENROLL_WAIT_SECONDS,
         metavar="SECONDS",
-        help=(
-            "How long to poll for approval "
-            f"(default: {DEFAULT_ENROLL_WAIT_SECONDS}; 0 submits and exits)."
-        ),
+        help=(f"How long to poll for approval (default: {DEFAULT_ENROLL_WAIT_SECONDS}; 0 submits and exits)."),
     )
     request_parser.add_argument(
         "--new",

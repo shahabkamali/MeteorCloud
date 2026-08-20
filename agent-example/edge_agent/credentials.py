@@ -11,22 +11,27 @@ import tempfile
 from pathlib import Path
 
 
-def write_device_token(path: Path, token: str) -> None:
-    """Atomically write the device token with owner-only (0600) permissions."""
+def write_secret_file(path: Path, value: str, *, mode: int = 0o600) -> None:
+    """Atomically write a secret (or CA file) with the given permissions."""
     path.parent.mkdir(parents=True, exist_ok=True)
-    fd, tmp_name = tempfile.mkstemp(dir=str(path.parent), prefix=".tmp-token-")
+    fd, tmp_name = tempfile.mkstemp(dir=str(path.parent), prefix=".tmp-secret-")
     try:
-        os.chmod(tmp_name, 0o600)
+        os.chmod(tmp_name, mode)
         with os.fdopen(fd, "w", encoding="utf-8") as handle:
-            handle.write(token)
+            handle.write(value)
         os.replace(tmp_name, path)
-        os.chmod(path, 0o600)
+        os.chmod(path, mode)
     except BaseException:
         try:
             os.unlink(tmp_name)
         except OSError:
             pass
         raise
+
+
+def write_device_token(path: Path, token: str) -> None:
+    """Atomically write the device token with owner-only (0600) permissions."""
+    write_secret_file(path, token)
 
 
 def read_device_token(path: Path) -> str | None:

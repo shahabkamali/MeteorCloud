@@ -95,6 +95,17 @@ class Settings(BaseSettings):
         default=3600,
         alias="ENROLLMENT_REQUEST_TTL_SECONDS",
     )
+
+    mqtt_enabled: bool = Field(default=False, alias="MQTT_ENABLED")
+    mqtt_broker_host: str = Field(default="localhost", alias="MQTT_BROKER_HOST")
+    mqtt_public_host: str = Field(default="localhost", alias="MQTT_PUBLIC_HOST")
+    mqtt_broker_port: int = Field(default=8883, alias="MQTT_BROKER_PORT")
+    mqtt_platform_username: str = Field(default="platform", alias="MQTT_PLATFORM_USERNAME")
+    mqtt_platform_password: str = Field(default="dev-mqtt-platform", alias="MQTT_PLATFORM_PASSWORD")
+    mqtt_internal_token: str = Field(default="dev-mqtt-internal", alias="MQTT_INTERNAL_TOKEN")
+    mqtt_ca_cert_path: str = Field(default="certs/ca.crt", alias="MQTT_CA_CERT_PATH")
+    mqtt_ping_timeout_seconds: float = Field(default=8.0, alias="MQTT_PING_TIMEOUT_SECONDS")
+
     # When True, agent registration over plain HTTP is rejected. Left False for
     # now (Milestone 4) but available so HTTPS can be enforced later.
     registration_require_https: bool = Field(

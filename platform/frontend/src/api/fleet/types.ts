@@ -66,6 +66,9 @@ export type Device = {
   registered_at: string | null;
   created_at: string;
   updated_at: string;
+  mqtt_configured: boolean;
+  mqtt_status: "online" | "offline" | null;
+  mqtt_status_at: string | null;
 };
 
 export type DeviceCredential = {

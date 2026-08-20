@@ -23,6 +23,8 @@ make seed      # optional: owner@example.com / dev-password-123
 - Frontend: http://localhost:5173
 - Backend: http://localhost:8000/health
 - API docs: http://localhost:8000/docs
+- MQTT TLS: mqtts://localhost:8883
+- EMQX dashboard (dev): http://localhost:18083
 
 Stop: `make stop`
 

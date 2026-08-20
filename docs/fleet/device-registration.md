@@ -39,11 +39,19 @@ Response:
   "device_token": "dev_…",
   "organization_id": "…",
   "name": "edge-01",
-  "heartbeat_interval_seconds": 60
+  "heartbeat_interval_seconds": 60,
+  "mqtt": {
+    "host": "localhost",
+    "port": 8883,
+    "username": "device_<uuid>",
+    "password": "mqtt_…",
+    "tls": true
+  }
 }
 ```
 
-The `device_token` is the device's long-lived credential — store it securely.
+The `device_token` is the device's long-lived HTTP credential — store it securely.
+The MQTT password is returned only once and is stored separately from the HTTP token.
 
 ## Atomic behavior
 

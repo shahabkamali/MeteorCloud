@@ -72,3 +72,7 @@ override.tf.json
 
 # Misc
 *.bak
+
+# Local MQTT TLS material (private keys must never be committed)
+certs/*
+!certs/.gitkeep

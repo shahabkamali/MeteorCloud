@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import os
 import uuid
 from collections.abc import Generator
+
+os.environ["MQTT_ENABLED"] = "false"
 
 import pytest
 from fastapi.testclient import TestClient
@@ -38,6 +41,7 @@ def engine():
     assert_safe_test_database_url(settings.database_url)
     ensure_database_exists(settings.database_url)
     eng = create_engine(settings.database_url, pool_pre_ping=True)
+    Base.metadata.drop_all(bind=eng)
     Base.metadata.create_all(bind=eng)
     yield eng
     eng.dispose()
@@ -78,9 +82,7 @@ def client(db_session: Session) -> Generator[TestClient]:
     application.dependency_overrides[get_db] = override_get_db
     # Permissive limiter by default; tests that exercise rate limiting override
     # this on ``client.app.dependency_overrides``.
-    application.dependency_overrides[get_rate_limiter] = lambda: InMemoryRateLimiter(
-        limit=10_000, window_seconds=60
-    )
+    application.dependency_overrides[get_rate_limiter] = lambda: InMemoryRateLimiter(limit=10_000, window_seconds=60)
     application.dependency_overrides[get_enroll_request_rate_limiter] = lambda: InMemoryRateLimiter(
         limit=10_000, window_seconds=60
     )

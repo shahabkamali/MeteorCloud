@@ -34,7 +34,9 @@ This starts:
 | Backend | http://localhost:8000 |
 | API docs | http://localhost:8000/docs |
 | PostgreSQL | localhost:5432 |
-| Redis | internal Docker network only (unused in Milestone 1) |
+| MQTT TLS | mqtts://localhost:8883 |
+| EMQX dashboard | http://localhost:18083 (development only) |
+| Redis | internal Docker network |
 
 Stop with:
 

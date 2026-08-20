@@ -34,11 +34,8 @@ from app.modules.fleet.schemas import (
     AgentEnrollRequest,
     AgentEnrollResponse,
 )
-from app.modules.fleet.tokens import (
-    generate_claim_secret,
-    generate_device_token,
-    hash_token,
-)
+from app.modules.fleet.tokens import generate_claim_secret, generate_device_token, hash_token
+from app.modules.mqtt.credentials import issue_mqtt_credentials
 from app.modules.organizations.models import Organization
 
 
@@ -175,6 +172,7 @@ class EnrollmentService:
             )
 
         device, plaintext = self._issue_device(request, now)
+        mqtt = issue_mqtt_credentials(self.session, device, self.settings)
         request.claimed_at = now
         request.device_id = device.id
         self.requests.update(request)
@@ -188,6 +186,7 @@ class EnrollmentService:
             organization_id=device.organization_id,
             name=device.name,
             heartbeat_interval_seconds=self.settings.device_heartbeat_interval_seconds,
+            mqtt=mqtt,
         )
 
     # ------------------------------------------------------------- helpers
@@ -245,9 +244,7 @@ class EnrollmentService:
             return candidate.strip()[:255]
         return "unnamed-device"
 
-    def _apply_inventory(
-        self, device: Device, request: DeviceEnrollmentRequest, identity: DeviceIdentity
-    ) -> None:
+    def _apply_inventory(self, device: Device, request: DeviceEnrollmentRequest, identity: DeviceIdentity) -> None:
         device.machine_id = identity.machine_id
         device.serial_number = identity.serial_number
         device.mac_addresses = identity.mac_addresses

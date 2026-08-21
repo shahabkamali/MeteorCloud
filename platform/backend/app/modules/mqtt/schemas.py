@@ -65,10 +65,11 @@ class PingCommandPayload(BaseModel):
 
 
 class MqttTestPublishRequest(BaseModel):
-    device_id: uuid.UUID
-    payload: dict[str, Any] | None = None
+    topic: str | None = None
+    device_id: uuid.UUID | None = None
+    payload: str | dict[str, Any] | None = None
 
 
 class MqttTestPublishResponse(BaseModel):
     topic: str
-    payload: dict[str, Any]
+    payload: str

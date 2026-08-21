@@ -116,7 +116,7 @@ beforeEach(() => {
   vi.mocked(fleetApi.listenMqttEvents).mockReturnValue(() => {});
   vi.mocked(fleetApi.publishMqttTest).mockResolvedValue({
     topic: "devices/device-1/events",
-    payload: { message: "hello from console" },
+    payload: "hello from console",
   });
 });
 
@@ -379,6 +379,9 @@ describe("Device detail", () => {
 
     renderApp(["/organizations/org-1/devices/device-1"]);
     expect(await screen.findByText("MQTT Connection")).toBeInTheDocument();
+    expect(screen.getAllByText("machine-123").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("devices/device-1/events").length).toBeGreaterThan(0);
+    expect(screen.getByText(/meteorcli mqtt-test/)).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: /test connection/i }));
     expect(await screen.findByText(/connection test successful/i)).toBeInTheDocument();
     expect(screen.getByText(/round trip: 120 ms/i)).toBeInTheDocument();
@@ -513,20 +516,14 @@ describe("API keys", () => {
 });
 
 describe("MQTT test", () => {
-  it("lists the example topic and shows a received payload", async () => {
+  it("sends and shows plain text on a typed topic", async () => {
     const user = userEvent.setup();
-    vi.mocked(fleetApi.listDevices).mockResolvedValue({
-      items: [device],
-      total: 1,
-      page: 1,
-      page_size: 100,
-    });
-    vi.mocked(fleetApi.listenMqttEvents).mockImplementation((_token, _org, _deviceId, onEvent) => {
+    vi.mocked(fleetApi.listenMqttEvents).mockImplementation((_token, _org, topic, onEvent) => {
       onEvent({
         organization_id: "org-1",
-        device_id: "device-1",
-        topic: "devices/device-1/events",
-        payload: '{"source":"meteorcli","message":"mqtt-test"}',
+        device_id: null,
+        topic,
+        payload: "23.5",
         received_at: new Date().toISOString(),
       });
       return () => {};
@@ -534,11 +531,10 @@ describe("MQTT test", () => {
 
     renderApp(["/organizations/org-1/mqtt"]);
     expect(await screen.findByRole("heading", { name: /mqtt test/i })).toBeInTheDocument();
-    expect(await screen.findByText("devices/device-1/events")).toBeInTheDocument();
-    expect(screen.getByText(/meteorcli mqtt-test/)).toBeInTheDocument();
-    expect(screen.getByText(/meteorcli mqtt-listen/)).toBeInTheDocument();
+    expect(screen.queryByLabelText(/^device$/i)).not.toBeInTheDocument();
+    await user.type(screen.getByLabelText(/^topic$/i), "lab/temp");
     await user.click(screen.getByRole("button", { name: /^listen$/i }));
-    expect(await screen.findByText(/"mqtt-test"/)).toBeInTheDocument();
+    expect(await screen.findByText("23.5")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: /^stop$/i }));
     expect(screen.getByRole("button", { name: /^listen$/i })).toBeInTheDocument();
   });

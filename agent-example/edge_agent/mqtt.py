@@ -233,6 +233,27 @@ def commands_topic(device_id: str) -> str:
     return f"devices/{device_id}/commands"
 
 
+DEFAULT_TEST_TOPIC_SUFFIX = "events"
+
+
+def normalize_device_topic(device_id: str, topic: str | None) -> str:
+    """Resolve a CLI topic to devices/{device_id}/…. Reject other devices and wildcards."""
+    raw = (topic or DEFAULT_TEST_TOPIC_SUFFIX).strip()
+    if not raw:
+        raw = DEFAULT_TEST_TOPIC_SUFFIX
+    if any(part in {"+", "#"} for part in raw.split("/")):
+        raise ValueError("MQTT wildcards are not allowed")
+    prefix = f"devices/{device_id}/"
+    if "/" not in raw:
+        return f"{prefix}{raw}"
+    if not raw.startswith(prefix):
+        raise ValueError(f"topic must be under {prefix.rstrip('/')}")
+    suffix = raw[len(prefix) :]
+    if not suffix:
+        raise ValueError(f"topic must be under {prefix.rstrip('/')}")
+    return raw
+
+
 def _device_mqtt_client(
     device_id: str,
     config: MqttConfig,
@@ -275,46 +296,73 @@ def _wait_for_connect(
         connect_result["reason_code"] = reason_code
         connected.set()
 
+    def _on_disconnect(
+        _client: mqtt.Client,
+        _userdata: object,
+        _disconnect_flags: object,
+        reason_code: object,
+        _properties: object = None,
+    ) -> None:
+        if connected.is_set():
+            return
+        connect_result["disconnect"] = reason_code
+        connected.set()
+
+    client.reconnect_on_failure = False
     client.on_connect = _on_connect
+    client.on_disconnect = _on_disconnect
     logger.info("Connecting to MQTT %s:%s with TLS", host, port)
-    client.connect_async(host, port, 30)
     client.loop_start()
+    client.connect_async(host, port, 30)
     if not connected.wait(timeout):
         raise RuntimeError(f"MQTT connect timed out ({host}:{port})")
     reason_code = connect_result.get("reason_code")
     if getattr(reason_code, "is_failure", False):
-        raise RuntimeError(f"MQTT connect refused: {reason_code}")
+        raise RuntimeError(
+            f"MQTT connect refused: {reason_code}. "
+            "If this device was re-registered, mqtt.json has a stale password."
+        )
+    if "disconnect" in connect_result and reason_code is None:
+        raise RuntimeError(
+            f"MQTT connection closed before CONNACK ({connect_result['disconnect']}). "
+            "Check the MQTT password in mqtt.json, or re-register the device."
+        )
 
 
 def publish_test_event(
     device_id: str,
     config: MqttConfig,
-    payload: dict,
+    payload: dict | str,
     *,
+    topic: str | None = None,
     tls_insecure: bool | None = None,
     server_url: str | None = None,
     timeout: float = 12,
-) -> None:
-    """Connect over TLS, publish one events message, then disconnect."""
+) -> str:
+    """Connect over TLS, publish one message, then disconnect."""
     insecure = tls_insecure_enabled() if tls_insecure is None else tls_insecure
     host = resolve_mqtt_broker_host(config.host, server_url)
+    resolved = normalize_device_topic(device_id, topic)
+    body = json.dumps(payload) if isinstance(payload, dict) else payload
     verify_broker_tls(host, config.port, config.ca_path, insecure=insecure)
     client = _device_mqtt_client(device_id, config, suffix="mqtt-test", insecure=insecure)
     try:
         _wait_for_connect(client, host, config.port, timeout)
-        info = client.publish(events_topic(device_id), json.dumps(payload), qos=COMMANDS_QOS, retain=False)
+        info = client.publish(resolved, body, qos=COMMANDS_QOS, retain=False)
         info.wait_for_publish(timeout=8)
         if not info.is_published():
             raise RuntimeError("MQTT publish did not complete")
     finally:
         client.disconnect()
         client.loop_stop()
+    return resolved
 
 
-def listen_commands(
+def listen_mqtt(
     device_id: str,
     config: MqttConfig,
     *,
+    topic: str | None = None,
     tls_insecure: bool | None = None,
     server_url: str | None = None,
     timeout: float | None = None,
@@ -322,14 +370,14 @@ def listen_commands(
     on_message: Callable[[str, str], None] | None = None,
     sleep: Callable[[float], None] = time.sleep,
 ) -> str:
-    """Subscribe to this device's commands topic and print payloads until timeout.
+    """Subscribe to a device topic and print payloads until timeout.
 
-    Does not handle commands (no ping/pong). Uses a unique client id so
-    ``meteorcli run`` stays connected.
+    Default topic matches the Fleet MQTT test page (events). Uses a unique
+    client id so ``meteorcli run`` stays connected. Does not handle ping.
     """
     insecure = tls_insecure_enabled() if tls_insecure is None else tls_insecure
     host = resolve_mqtt_broker_host(config.host, server_url)
-    topic = commands_topic(device_id)
+    resolved = normalize_device_topic(device_id, topic)
     emit = on_message or (lambda _topic, _payload: None)
     verify_broker_tls(host, config.port, config.ca_path, insecure=insecure)
     client = _device_mqtt_client(device_id, config, suffix="mqtt-listen", insecure=insecure)
@@ -345,9 +393,9 @@ def listen_commands(
     client.on_message = _on_message
     try:
         _wait_for_connect(client, host, config.port, connect_timeout)
-        result, _mid = client.subscribe(topic, qos=COMMANDS_QOS)
+        result, _mid = client.subscribe(resolved, qos=COMMANDS_QOS)
         if result != mqtt.MQTT_ERR_SUCCESS:
-            raise RuntimeError(f"MQTT subscribe failed for {topic}")
+            raise RuntimeError(f"MQTT subscribe failed for {resolved}")
         deadline = None if timeout is None else time.monotonic() + timeout
         while True:
             if timeout is not None and (timeout <= 0 or time.monotonic() >= deadline):
@@ -356,4 +404,4 @@ def listen_commands(
     finally:
         client.disconnect()
         client.loop_stop()
-    return topic
+    return resolved

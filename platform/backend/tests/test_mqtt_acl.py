@@ -27,6 +27,19 @@ def test_device_can_subscribe_own_commands() -> None:
     assert can_access_topic(DEVICE, "subscribe", f"devices/{DEVICE}/commands")
 
 
+def test_device_can_subscribe_own_events() -> None:
+    assert can_access_topic(DEVICE, "subscribe", f"devices/{DEVICE}/events")
+
+
+def test_device_can_use_custom_own_topic() -> None:
+    assert can_access_topic(DEVICE, "publish", f"devices/{DEVICE}/custom")
+    assert can_access_topic(DEVICE, "subscribe", f"devices/{DEVICE}/custom")
+
+
+def test_device_cannot_publish_inbound_commands() -> None:
+    assert not can_access_topic(DEVICE, "publish", f"devices/{DEVICE}/commands")
+
+
 def test_device_cannot_publish_to_another_device() -> None:
     assert not can_access_topic(DEVICE, "publish", f"devices/{OTHER}/status")
 

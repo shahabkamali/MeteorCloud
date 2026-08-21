@@ -781,39 +781,56 @@ class FleetService:
         *,
         actor: User,
         organization_id: uuid.UUID,
-        device_id: uuid.UUID,
-    ) -> Device:
+        device_id: uuid.UUID | None,
+        topic: str | None,
+    ) -> str:
+        from app.modules.mqtt.topics import validate_mqtt_topic
+
         self._require_membership(organization_id, actor.id)
-        return self._require_device(organization_id, device_id)
+        if device_id is not None:
+            self._require_device(organization_id, device_id)
+            resolved = topic or f"devices/{device_id}/events"
+        else:
+            resolved = topic or ""
+        return validate_mqtt_topic(resolved, allow_wildcards=True)
 
     def publish_mqtt_test_event(
         self,
         *,
         actor: User,
         organization_id: uuid.UUID,
-        device_id: uuid.UUID,
-        payload: dict[str, Any] | None,
+        device_id: uuid.UUID | None,
+        topic: str | None,
+        payload: str | dict[str, Any] | None,
         publisher: MqttPublisher,
     ) -> MqttTestPublishResponse:
+        from app.core.exceptions import ValidationAppError
+        from app.modules.mqtt.topics import validate_mqtt_topic
+
         membership = self._require_membership(organization_id, actor.id)
         self._require_manage(membership.role)
-        device = self._require_device(organization_id, device_id)
-        cred = self.session.get(DeviceMqttCredential, device.id)
-        if cred is None or cred.revoked_at is not None:
-            raise ConflictError(
-                "mqtt_not_configured",
-                "This device has no active MQTT credential.",
-            )
-        body = payload if payload is not None else {"source": "console", "message": "hello from console"}
-        topic = f"devices/{device.id}/events"
+        if device_id is not None:
+            self._require_device(organization_id, device_id)
+            resolved = topic or f"devices/{device_id}/events"
+        else:
+            if not topic:
+                raise ValidationAppError("mqtt_topic_required", "A topic is required.")
+            resolved = topic
+        resolved = validate_mqtt_topic(resolved, allow_wildcards=False)
+        if isinstance(payload, dict):
+            text = json.dumps(payload)
+        elif payload is None:
+            text = "hello from console"
+        else:
+            text = payload
         try:
-            publisher.publish(topic, json.dumps(body), qos=1, retain=False)
+            publisher.publish(resolved, text, qos=1, retain=False)
         except Exception as exc:
             raise ConflictError(
                 "mqtt_unavailable",
                 "Could not publish to the MQTT broker.",
             ) from exc
-        return MqttTestPublishResponse(topic=topic, payload=body)
+        return MqttTestPublishResponse(topic=resolved, payload=text)
 
     def _require_device(self, organization_id: uuid.UUID, device_id: uuid.UUID) -> Device:
         device = self.devices.get(organization_id=organization_id, device_id=device_id)

@@ -32,7 +32,7 @@ from app.modules.fleet.schemas import (
     RegistrationTokenResponse,
 )
 from app.modules.identity.dependencies import CurrentUser
-from app.modules.mqtt.broker import get_mqtt_publisher
+from app.modules.mqtt.broker import get_mqtt_publisher, get_mqtt_topic_watcher
 from app.modules.mqtt.hub import get_mqtt_event_hub
 from app.modules.mqtt.schemas import DevicePingResponse, MqttTestPublishRequest, MqttTestPublishResponse
 from app.modules.mqtt.service import MqttPublisher
@@ -430,15 +430,20 @@ def stream_mqtt_events(
     organization_id: uuid.UUID,
     current_user: CurrentUser,
     service: FleetSvc,
-    device_id: Annotated[uuid.UUID, Query()],
+    device_id: Annotated[uuid.UUID | None, Query()] = None,
+    topic: Annotated[str | None, Query()] = None,
 ) -> StreamingResponse:
-    service.require_mqtt_listener(
+    topic_filter = service.require_mqtt_listener(
         actor=current_user,
         organization_id=organization_id,
         device_id=device_id,
+        topic=topic,
     )
+    watcher = get_mqtt_topic_watcher()
+    if watcher is not None:
+        watcher.watch_topic(topic_filter)
     hub = get_mqtt_event_hub()
-    queue = hub.subscribe(organization_id, device_id)
+    queue = hub.subscribe(organization_id, topic_filter)
 
     def _stream():
         try:
@@ -449,7 +454,9 @@ def stream_mqtt_events(
                 except Empty:
                     yield ": keepalive\n\n"
         finally:
-            hub.unsubscribe(organization_id, device_id, queue)
+            hub.unsubscribe(organization_id, topic_filter, queue)
+            if watcher is not None:
+                watcher.unwatch_topic(topic_filter)
 
     return StreamingResponse(
         _stream(),
@@ -474,6 +481,7 @@ def publish_mqtt_test_event(
         actor=current_user,
         organization_id=organization_id,
         device_id=payload.device_id,
+        topic=payload.topic,
         payload=payload.payload,
         publisher=publisher,
     )

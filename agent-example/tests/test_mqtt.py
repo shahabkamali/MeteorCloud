@@ -6,7 +6,13 @@ import json
 import os
 import stat
 
-from edge_agent.mqtt import handle_command, next_backoff, tls_insecure_enabled, verify_broker_tls
+from edge_agent.mqtt import (
+    handle_command,
+    next_backoff,
+    normalize_device_topic,
+    tls_insecure_enabled,
+    verify_broker_tls,
+)
 from edge_agent.mqtt_config import (
     MqttConfig,
     mqtt_from_api_payload,
@@ -44,8 +50,27 @@ def test_resolve_mqtt_broker_host_uses_api_host_when_loopback() -> None:
     assert resolve_mqtt_broker_host("localhost", "http://127.0.0.1:8000") == "localhost"
 
 
-def test_listen_commands_subscribes_only_to_commands(monkeypatch) -> None:
-    from edge_agent.mqtt import listen_commands
+def test_normalize_device_topic() -> None:
+    device = "bed66060-1a08-452b-9e17-ffdc29328904"
+    assert normalize_device_topic(device, None) == f"devices/{device}/events"
+    assert normalize_device_topic(device, "commands") == f"devices/{device}/commands"
+    assert normalize_device_topic(device, f"devices/{device}/custom") == f"devices/{device}/custom"
+    try:
+        normalize_device_topic(device, "devices/11111111-1111-1111-1111-111111111111/events")
+    except ValueError as exc:
+        assert "must be under" in str(exc)
+    else:
+        raise AssertionError("expected foreign topic to fail")
+    try:
+        normalize_device_topic(device, "devices/+/events")
+    except ValueError as exc:
+        assert "wildcard" in str(exc).lower()
+    else:
+        raise AssertionError("expected wildcard to fail")
+
+
+def test_listen_mqtt_subscribes_to_requested_topic(monkeypatch) -> None:
+    from edge_agent.mqtt import listen_mqtt
 
     subscribed: list[str] = []
 
@@ -86,9 +111,20 @@ def test_listen_commands_subscribes_only_to_commands(monkeypatch) -> None:
 
     monkeypatch.setattr("edge_agent.mqtt.verify_broker_tls", lambda *args, **kwargs: None)
     monkeypatch.setattr("edge_agent.mqtt.mqtt.Client", FakeMqttClient)
-    topic = listen_commands(
+    topic = listen_mqtt(
         "device-1",
         MqttConfig(host="localhost", port=8883, username="u", password="p"),
+        tls_insecure=True,
+        timeout=0,
+        sleep=lambda _seconds: None,
+    )
+    assert topic == "devices/device-1/events"
+    assert subscribed == ["devices/device-1/events"]
+    subscribed.clear()
+    topic = listen_mqtt(
+        "device-1",
+        MqttConfig(host="localhost", port=8883, username="u", password="p"),
+        topic="commands",
         tls_insecure=True,
         timeout=0,
         sleep=lambda _seconds: None,

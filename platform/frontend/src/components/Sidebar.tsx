@@ -7,6 +7,7 @@ import {
   Layers,
   LayoutDashboard,
   LogIn,
+  Radio,
   UserPlus,
 } from "lucide-react";
 import { NavLink } from "react-router-dom";
@@ -69,6 +70,10 @@ export function Sidebar() {
                 <NavLink to={`/organizations/${orgId}/devices`} className={linkClass}>
                   <Cpu className="h-4 w-4" />
                   Devices
+                </NavLink>
+                <NavLink to={`/organizations/${orgId}/mqtt`} className={linkClass}>
+                  <Radio className="h-4 w-4" />
+                  MQTT test
                 </NavLink>
                 <NavLink to={`/organizations/${orgId}/api-keys`} className={linkClass}>
                   <KeyRound className="h-4 w-4" />

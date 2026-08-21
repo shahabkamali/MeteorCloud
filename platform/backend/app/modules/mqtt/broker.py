@@ -29,6 +29,7 @@ class PlatformMqttClient(MqttPublisher):
         self._ready = Event()
         self._pending_subs = 0
         self._lock = Lock()
+        self._watch_counts: dict[str, int] = {}
 
     def start(self) -> None:
         client = mqtt.Client(
@@ -79,6 +80,27 @@ class PlatformMqttClient(MqttPublisher):
         if not info.is_published():
             raise RuntimeError("MQTT publish did not complete.")
 
+    def watch_topic(self, topic: str) -> None:
+        client = self._client
+        with self._lock:
+            self._watch_counts[topic] = self._watch_counts.get(topic, 0) + 1
+            first = self._watch_counts[topic] == 1
+        if first and topic not in _SUBSCRIBE_TOPICS and client is not None:
+            client.subscribe(topic, qos=1)
+
+    def unwatch_topic(self, topic: str) -> None:
+        client = self._client
+        with self._lock:
+            remaining = self._watch_counts.get(topic, 0) - 1
+            if remaining <= 0:
+                self._watch_counts.pop(topic, None)
+                last = True
+            else:
+                self._watch_counts[topic] = remaining
+                last = False
+        if last and topic not in _SUBSCRIBE_TOPICS and client is not None:
+            client.unsubscribe(topic)
+
     def _on_connect(
         self,
         client: mqtt.Client,
@@ -93,9 +115,15 @@ class PlatformMqttClient(MqttPublisher):
             return
         self._ready.clear()
         with self._lock:
-            self._pending_subs = len(_SUBSCRIBE_TOPICS)
+            extra = [name for name, count in self._watch_counts.items() if count > 0]
+            self._pending_subs = len(_SUBSCRIBE_TOPICS) + sum(
+                1 for name in extra if name not in _SUBSCRIBE_TOPICS
+            )
         for topic in _SUBSCRIBE_TOPICS:
             client.subscribe(topic, qos=1)
+        for topic in extra:
+            if topic not in _SUBSCRIBE_TOPICS:
+                client.subscribe(topic, qos=1)
         logger.info("MQTT platform client connected")
 
     def _on_subscribe(
@@ -133,19 +161,27 @@ class PlatformMqttClient(MqttPublisher):
         message: mqtt.MQTTMessage,
     ) -> None:
         parsed = parse_device_topic(message.topic)
-        if parsed is None:
-            return
-        device_id, suffix = parsed
         payload = message.payload.decode("utf-8", errors="replace")
         session = SessionLocal()
         try:
             service = MqttService(session, settings=self.settings)
-            if suffix == "status":
-                service.apply_status_message(device_id=device_id, payload=payload)
-            elif suffix == "commands/result":
-                service.apply_command_result(device_id=device_id, payload=payload)
-            elif suffix == "events":
-                _fanout_event(session, device_id=device_id, topic=message.topic, payload=payload)
+            org_id = None
+            device_id = None
+            if parsed is not None:
+                device_id, suffix = parsed
+                if suffix == "status":
+                    service.apply_status_message(device_id=device_id, payload=payload)
+                elif suffix == "commands/result":
+                    service.apply_command_result(device_id=device_id, payload=payload)
+                device = session.get(Device, device_id)
+                if device is not None:
+                    org_id = device.organization_id
+            _fanout_event(
+                organization_id=org_id,
+                device_id=device_id,
+                topic=message.topic,
+                payload=payload,
+            )
             session.commit()
         except Exception:
             session.rollback()
@@ -154,13 +190,16 @@ class PlatformMqttClient(MqttPublisher):
             session.close()
 
 
-def _fanout_event(session, *, device_id: uuid.UUID, topic: str, payload: str) -> None:
-    device = session.get(Device, device_id)
-    if device is None:
-        return
+def _fanout_event(
+    *,
+    organization_id: uuid.UUID | None,
+    device_id: uuid.UUID | None,
+    topic: str,
+    payload: str,
+) -> None:
     get_mqtt_event_hub().publish(
         MqttTestEvent(
-            organization_id=device.organization_id,
+            organization_id=organization_id,
             device_id=device_id,
             topic=topic,
             payload=payload,
@@ -171,6 +210,10 @@ def _fanout_event(session, *, device_id: uuid.UUID, topic: str, payload: str) ->
 
 _publisher: MqttPublisher | None = None
 _platform_client: PlatformMqttClient | None = None
+
+
+def get_mqtt_topic_watcher() -> PlatformMqttClient | None:
+    return _platform_client
 
 
 def get_mqtt_publisher() -> MqttPublisher:

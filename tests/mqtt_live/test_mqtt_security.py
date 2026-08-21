@@ -84,6 +84,8 @@ def test_own_topics_allowed(api, live_config):
     try:
         assert session.wait_connected() is True
         assert session.wait_subscribed() is True
+        session.subscribe(f"devices/{device.device_id}/events")
+        assert session.wait_subscribed() is True
         assert session.publish(
             f"devices/{device.device_id}/status",
             json.dumps({"status": "online"}),

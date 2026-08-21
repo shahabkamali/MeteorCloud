@@ -2,8 +2,8 @@ import { resolveApiBaseUrl } from "@/lib/apiBase";
 import { apiRequest, ApiError } from "@/api/http";
 
 export type MqttTestEvent = {
-  organization_id: string;
-  device_id: string;
+  organization_id: string | null;
+  device_id: string | null;
   topic: string;
   payload: string;
   received_at: string;
@@ -11,35 +11,39 @@ export type MqttTestEvent = {
 
 export type MqttTestPublishResult = {
   topic: string;
-  payload: Record<string, unknown>;
+  payload: string;
 };
 
 export function publishMqttTest(
   token: string,
   organizationId: string,
-  deviceId: string,
-  payload?: Record<string, unknown>,
+  body: { topic?: string; deviceId?: string; payload?: string },
 ): Promise<MqttTestPublishResult> {
   return apiRequest<MqttTestPublishResult>(`/api/v1/organizations/${organizationId}/mqtt/publish`, {
     method: "POST",
     token,
-    body: { device_id: deviceId, payload: payload ?? undefined },
+    body: {
+      topic: body.topic,
+      device_id: body.deviceId,
+      payload: body.payload,
+    },
   });
 }
 
 export function listenMqttEvents(
   token: string,
   organizationId: string,
-  deviceId: string,
+  topic: string,
   onEvent: (event: MqttTestEvent) => void,
   onError?: (error: Error) => void,
 ): () => void {
   const controller = new AbortController();
+  const params = new URLSearchParams({ topic });
 
   void (async () => {
     try {
       const response = await fetch(
-        `${resolveApiBaseUrl()}/api/v1/organizations/${organizationId}/mqtt/events?device_id=${encodeURIComponent(deviceId)}`,
+        `${resolveApiBaseUrl()}/api/v1/organizations/${organizationId}/mqtt/events?${params.toString()}`,
         {
           headers: {
             Accept: "text/event-stream",

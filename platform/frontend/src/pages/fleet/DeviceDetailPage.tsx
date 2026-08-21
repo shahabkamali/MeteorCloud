@@ -16,6 +16,7 @@ import {
 import { ApiError } from "@/api/http";
 import { getOrganization } from "@/api/organizations";
 import { useAuth } from "@/auth/AuthContext";
+import { MqttConsole } from "@/components/fleet/MqttConsole";
 import { OneTimeSecretDialog } from "@/components/fleet/OneTimeSecretDialog";
 import { StatusBadge } from "@/components/fleet/StatusBadge";
 import { Button } from "@/components/ui/button";
@@ -96,6 +97,16 @@ export function DeviceDetailPage() {
   }
   const device = deviceQuery.data;
   const currentName = name ?? device.name;
+  const eventsTopic = `devices/${device.id}/events`;
+  const commandsTopic = `devices/${device.id}/commands`;
+  const statusTopic = `devices/${device.id}/status`;
+  const meteorcliExamples = [
+    "meteorcli mqtt-test",
+    `meteorcli mqtt-test ${eventsTopic} '{"machine_id":"${device.machine_id ?? ""}","message":"hello"}'`,
+    "meteorcli mqtt-listen",
+    `meteorcli mqtt-listen ${eventsTopic}`,
+    `meteorcli mqtt-listen commands`,
+  ].join("\n");
 
   async function onSave() {
     setError(null);
@@ -204,6 +215,18 @@ export function DeviceDetailPage() {
             value={device.mqtt_status_at ? formatDateTime(device.mqtt_status_at) : "—"}
           />
         </div>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Detail label="Device ID" value={device.id} />
+          <Detail label="Machine ID" value={device.machine_id} />
+          <Detail label="MQTT username" value={`device_${device.id}`} />
+          <Detail label="Events topic" value={eventsTopic} />
+          <Detail label="Commands topic" value={commandsTopic} />
+          <Detail label="Status topic" value={statusTopic} />
+        </div>
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">On the device</p>
+          <pre className="mt-2 overflow-x-auto rounded-md bg-secondary p-3 text-sm">{meteorcliExamples}</pre>
+        </div>
         {canManage && (
           <div className="flex flex-wrap items-center gap-3">
             <Button onClick={onTestConnection} disabled={pinging}>
@@ -212,6 +235,15 @@ export function DeviceDetailPage() {
             {pingResult && <p className="text-sm text-green-800">{pingResult}</p>}
           </div>
         )}
+        {token ? (
+          <MqttConsole
+            token={token}
+            organizationId={organizationId}
+            defaultTopic={eventsTopic}
+            topicLocked
+            canPublish={canManage}
+          />
+        ) : null}
       </div>
 
       <div className="grid gap-4 rounded-lg border border-border bg-white/80 p-6 shadow-sm sm:grid-cols-2">

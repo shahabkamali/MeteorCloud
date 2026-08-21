@@ -8,8 +8,8 @@ Subcommands
   request-token  Ask the API for a device token; wait briefly for admin approval.
   claim          Collect the device token after a later approval.
   run        Send periodic heartbeats.
-  mqtt-test    Publish one TLS MQTT test message to devices/{id}/events.
-  mqtt-listen  Print commands the platform sends to this device.
+  mqtt-test    Publish one TLS MQTT message (default: devices/{id}/events).
+  mqtt-listen  Print messages on a device topic (default: devices/{id}/events).
   status       Show persisted (non-secret) configuration.
 
 Secrets are never printed by any command except when the user explicitly
@@ -649,26 +649,41 @@ def _cmd_mqtt_test(args: argparse.Namespace) -> int:
     config, _device_token = loaded
     from datetime import UTC, datetime
 
-    from edge_agent.mqtt import events_topic, publish_test_event
+    from edge_agent.mqtt import normalize_device_topic, publish_test_event
 
     mqtt_config = _mqtt_config_or_fail(paths, config)
     if mqtt_config is None:
         return 1
-    payload = {
-        "source": "meteorcli",
-        "message": "mqtt-test",
-        "sent_at": datetime.now(UTC).isoformat(),
-    }
-    topic = events_topic(config.device_id)
     try:
-        publish_test_event(
-            config.device_id, mqtt_config, payload, server_url=config.server_url
+        topic = normalize_device_topic(config.device_id, args.topic)
+        if args.message is None:
+            payload: dict | str = {
+                "source": "meteorcli",
+                "message": "mqtt-test",
+                "sent_at": datetime.now(UTC).isoformat(),
+            }
+        else:
+            raw = args.message.strip()
+            if raw.startswith("{") or raw.startswith("["):
+                payload = json.loads(raw)
+            else:
+                payload = args.message
+    except (ValueError, json.JSONDecodeError) as error:
+        print(f"error: {error}", file=sys.stderr)
+        return 1
+    try:
+        published_topic = publish_test_event(
+            config.device_id,
+            mqtt_config,
+            payload,
+            topic=topic,
+            server_url=config.server_url,
         )
     except Exception as error:
         logger.exception("MQTT test publish failed")
         print(f"error: MQTT test failed: {error}", file=sys.stderr)
         return 1
-    print(f"Published MQTT test message to {topic}")
+    print(f"Published MQTT test message to {published_topic}")
     return 0
 
 
@@ -678,21 +693,26 @@ def _cmd_mqtt_listen(args: argparse.Namespace) -> int:
     if loaded is None:
         return 1
     config, _device_token = loaded
-    from edge_agent.mqtt import commands_topic, listen_commands
+    from edge_agent.mqtt import listen_mqtt, normalize_device_topic
 
     mqtt_config = _mqtt_config_or_fail(paths, config)
     if mqtt_config is None:
         return 1
-    topic = commands_topic(config.device_id)
+    try:
+        topic = normalize_device_topic(config.device_id, args.topic)
+    except ValueError as error:
+        print(f"error: {error}", file=sys.stderr)
+        return 1
     print(f"Listening on {topic} (Ctrl+C to stop)", flush=True)
 
     def _print_message(message_topic: str, payload: str) -> None:
         print(f"{message_topic} {payload}", flush=True)
 
     try:
-        listen_commands(
+        listen_mqtt(
             config.device_id,
             mqtt_config,
+            topic=topic,
             server_url=config.server_url,
             timeout=args.timeout,
             on_message=_print_message,
@@ -721,7 +741,9 @@ def build_parser() -> argparse.ArgumentParser:
             f"  {PROG} register --token reg_XXXX\n"
             f"  {PROG} run\n"
             f"  {PROG} mqtt-test\n"
+            f"  {PROG} mqtt-test devices/DEVICE_ID/events '{{\"hello\":true}}'\n"
             f"  {PROG} mqtt-listen\n"
+            f"  {PROG} mqtt-listen devices/DEVICE_ID/commands\n"
             f"  {PROG} status\n"
             "\n"
             "Environment variables:\n"
@@ -924,21 +946,41 @@ def build_parser() -> argparse.ArgumentParser:
         "mqtt-test",
         help="Publish one MQTT test message over TLS.",
         description=(
-            "Publish a JSON payload to devices/{device_id}/events using mqtt.json. "
-            "Does not start the heartbeat loop."
+            "Publish to a device topic using mqtt.json. With no topic, uses "
+            "devices/{device_id}/events (same as the Fleet MQTT test page). "
+            "Optional message is JSON if it starts with { or [, otherwise raw text."
         ),
+    )
+    mqtt_test_parser.add_argument(
+        "topic",
+        nargs="?",
+        default=None,
+        help="Topic or suffix (default: events). Must be under this device.",
+    )
+    mqtt_test_parser.add_argument(
+        "message",
+        nargs="?",
+        default=None,
+        help="Payload to publish (default: a small mqtt-test JSON object).",
     )
     mqtt_test_parser.set_defaults(func=_cmd_mqtt_test)
 
     mqtt_listen_parser = subparsers.add_parser(
         "mqtt-listen",
-        help="Print MQTT commands sent to this device.",
+        help="Print MQTT messages on a device topic.",
         description=(
-            "Subscribe to devices/{device_id}/commands over TLS and print payloads. "
-            "This is the only topic the device credential may subscribe to. "
-            "Does not answer ping or start heartbeats. Uses a unique MQTT client id "
-            "so meteorcli run stays connected."
+            "Subscribe to a device topic over TLS and print payloads. "
+            "With no topic, uses devices/{device_id}/events (same as the Fleet "
+            "MQTT test page). Other topics must still belong to this device. "
+            "Does not answer ping. Uses a unique MQTT client id so meteorcli run "
+            "stays connected."
         ),
+    )
+    mqtt_listen_parser.add_argument(
+        "topic",
+        nargs="?",
+        default=None,
+        help="Topic or suffix (default: events). Must be under this device.",
     )
     mqtt_listen_parser.add_argument(
         "--timeout",

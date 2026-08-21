@@ -43,9 +43,11 @@ Then register a device (`meteorcli register` or request-token/claim). The agent
 stores MQTT credentials in `mqtt.json` (`0600`) and `mqtt-ca.crt`. Start
 `meteorcli run` so the agent connects, publishes `online`, and answers ping.
 
-On the device detail page: **Test Connection** (ping). For an AWS IoT-style
-subscribe/publish check, open **Fleet → MQTT test**, pick the device, click
-**Listen**, then on the device run:
+On the device detail page: **Test Connection** (ping), plus that device's ID,
+machine ID, topics, and meteorcli examples. Open **MQTT test** in the sidebar
+for a free-form topic/payload console (plain text, any topic).
+
+To watch a device event from the Pi:
 
 ```bash
 meteorcli mqtt-test
@@ -59,17 +61,31 @@ the device (not `localhost` for a Pi on the LAN). `make mqtt-certs` includes
 this machine's LAN IP in the broker certificate; restart EMQX after generating
 certs so it loads the new files.
 
-To print **commands the platform sends to the device** (ping, and later command
-types), run on the device:
+To print messages on the same topic as the Fleet MQTT test page, run:
 
 ```bash
 meteorcli mqtt-listen
 ```
 
-That subscribes only to `devices/{device_id}/commands` — the only topic the
-device credential is allowed to subscribe to. It does not show `mqtt-test`
-events (those are visible on the Fleet MQTT test page). It uses a separate
-MQTT client id, so `meteorcli run` can stay connected.
+That defaults to `devices/{device_id}/events`. Pass a topic (or suffix) to
+listen elsewhere on **this device only**:
+
+```bash
+meteorcli mqtt-listen commands
+meteorcli mqtt-listen devices/DEVICE_ID/custom
+```
+
+Publish with an optional topic and payload (`mqtt-test` with no args uses the
+same events topic as the UI):
+
+```bash
+meteorcli mqtt-test
+meteorcli mqtt-test devices/DEVICE_ID/events '{"hello":true}'
+meteorcli mqtt-test custom 'hello'
+```
+
+Wildcards and other devices' topics are rejected. Uses a separate MQTT client
+id, so `meteorcli run` can stay connected.
 
 ## Manual mosquitto checks
 
@@ -97,10 +113,11 @@ A second device username must be **denied** on `devices/OTHER_ID/#`.
 ## Topics
 
 ```text
-devices/{device_id}/status              PUBLISH (device, LWT)
-devices/{device_id}/events              PUBLISH (device and MQTT test console)
+devices/{device_id}/status              PUBLISH / SUBSCRIBE (device, LWT)
+devices/{device_id}/events              PUBLISH / SUBSCRIBE (device and MQTT test)
 devices/{device_id}/commands            SUBSCRIBE (device) / PUBLISH (platform)
-devices/{device_id}/commands/result     PUBLISH (device)
+devices/{device_id}/commands/result     PUBLISH / SUBSCRIBE (device)
+devices/{device_id}/…                   other names on this device only (no wildcards)
 ```
 
 QoS 1 for commands, results, and status.

@@ -1,4 +1,4 @@
-.PHONY: help dev stop up down plan status-aws test lint format typecheck install-backend install-frontend install-installer install-agent clean migrate seed backend-test frontend-test agent-test installer-test terraform-check ansible-check observability
+.PHONY: help dev stop up down plan status-aws test lint format typecheck install-backend install-frontend install-installer install-agent clean migrate seed backend-test frontend-test agent-test installer-test terraform-check ansible-check observability mqtt-certs test-mqtt test-cloud-e2e
 
 COMPOSE := docker compose -f docker-compose.yml -f docker-compose.dev.yml
 OBS_COMPOSE := $(COMPOSE) -f docker-compose.observability.yml
@@ -14,6 +14,7 @@ help: ## Show available commands
 
 dev: ## Start the development stack
 	@test -f .env || cp .env.example .env
+	@test -f certs/server.crt || ./scripts/generate-local-mqtt-certs.sh
 	$(COMPOSE) up --build -d
 	@echo ""
 	@echo "Development stack is starting:"
@@ -21,10 +22,25 @@ dev: ## Start the development stack
 	@echo "  Frontend: http://localhost:5173"
 	@echo "  API docs: http://localhost:8000/docs"
 	@echo "  Health:   http://localhost:8000/health"
+	@echo "  MQTT TLS: mqtts://localhost:8883"
+	@echo "  EMQX UI:  http://localhost:18083  (admin / public)"
 	@echo "  Seed:     make seed"
+
+mqtt-certs: ## Generate local MQTT CA and broker certificates
+	./scripts/generate-local-mqtt-certs.sh
+	-$(COMPOSE) restart emqx
+
+test-mqtt: ## Start local Compose MQTT stack and run live MQTT tests
+	chmod +x scripts/test-mqtt.sh
+	./scripts/test-mqtt.sh
+
+test-cloud-e2e: ## Terraform+Ansible AWS deploy, same MQTT tests, always destroy
+	chmod +x scripts/test-cloud-e2e.sh
+	./scripts/test-cloud-e2e.sh
 
 observability: ## Start the development stack plus Prometheus, Loki, and Grafana
 	@test -f .env || cp .env.example .env
+	@test -f certs/server.crt || ./scripts/generate-local-mqtt-certs.sh
 	$(OBS_COMPOSE) up --build -d
 	@echo ""
 	@echo "Observability stack is starting:"

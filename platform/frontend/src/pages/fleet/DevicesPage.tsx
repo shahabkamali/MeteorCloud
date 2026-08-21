@@ -1,5 +1,6 @@
 import { FormEvent, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { RefreshCw } from "lucide-react";
 import { Link, useParams } from "react-router-dom";
 
 import {
@@ -25,7 +26,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { canManageFleet } from "@/lib/permissions";
-import { formatDateTime } from "@/lib/utils";
+import { cn, formatDateTime } from "@/lib/utils";
 
 const PAGE_SIZE = 10;
 
@@ -126,6 +127,16 @@ export function DevicesPage() {
   const invalidateTokens = () =>
     queryClient.invalidateQueries({ queryKey: ["registration-tokens", organizationId] });
 
+  const isRefreshing = devicesQuery.isFetching || tokensQuery.isFetching;
+
+  async function refreshFleet() {
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ["devices", organizationId] }),
+      queryClient.invalidateQueries({ queryKey: ["registration-tokens", organizationId] }),
+      queryClient.invalidateQueries({ queryKey: ["enrollment-requests", organizationId] }),
+    ]);
+  }
+
   const createMutation = useMutation({
     mutationFn: () =>
       createRegistrationToken(token!, organizationId, {
@@ -187,16 +198,28 @@ export function DevicesPage() {
           <h1 className="text-3xl font-semibold tracking-tight">Fleet</h1>
           <p className="mt-2 text-muted-foreground">{orgQuery.data?.name}</p>
         </div>
-        {canManage && (
+        <div className="flex items-center gap-2">
           <Button
-            onClick={() => {
-              setFormError(null);
-              setShowAddForm((open) => !open);
-            }}
+            type="button"
+            variant="outline"
+            className="h-10 w-10 rounded-full p-0"
+            aria-label="Refresh devices"
+            disabled={isRefreshing}
+            onClick={() => void refreshFleet()}
           >
-            {showAddForm ? "Close" : "Add device"}
+            <RefreshCw className={cn("h-4 w-4", isRefreshing && "animate-spin")} />
           </Button>
-        )}
+          {canManage && (
+            <Button
+              onClick={() => {
+                setFormError(null);
+                setShowAddForm((open) => !open);
+              }}
+            >
+              {showAddForm ? "Close" : "Add device"}
+            </Button>
+          )}
+        </div>
       </div>
       <FleetNav organizationId={organizationId} />
 
@@ -329,7 +352,7 @@ export function DevicesPage() {
       <div className="grid gap-3 rounded-lg border border-border bg-white/80 p-4 shadow-sm md:grid-cols-4">
         <Input
           aria-label="Search devices"
-          placeholder="Search name, hostname, machine ID…"
+          placeholder="Search name, hostname, serial, MAC…"
           value={search}
           onChange={(event) => {
             setPage(1);

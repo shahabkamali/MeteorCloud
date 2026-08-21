@@ -27,7 +27,7 @@ def _create_key(client: TestClient, org_id, headers, **extra) -> dict:
 def test_enroll_request_requires_api_key(client: TestClient) -> None:
     response = client.post(
         "/api/v1/agent/enroll/request",
-        json={"name": "edge-01", "machine_id": "m-1"},
+        json={"name": "edge-01", "mac_addresses": ["aa:bb:cc:dd:ee:01"]},
     )
     assert response.status_code == 401
 
@@ -43,7 +43,6 @@ def test_submit_request_then_approve_then_claim(client: TestClient, db_session: 
         headers={"Authorization": f"Bearer {key['api_key']}"},
         json={
             "name": "edge-01",
-            "machine_id": "machine-123",
             "mac_addresses": ["AA:BB:CC:DD:EE:FF"],
             "hostname": "edge-01",
             "architecture": "x86_64",
@@ -98,7 +97,7 @@ def test_submit_request_then_approve_then_claim(client: TestClient, db_session: 
     assert listed.json()["total"] == 1
     device = listed.json()["items"][0]
     assert device["name"] == "warehouse-edge-01"
-    assert device["machine_id"] == "machine-123"
+    assert device["mac_addresses"] == ["aa:bb:cc:dd:ee:ff"]
 
     # Subsequent poll does not re-issue the credential.
     second = client.post(
@@ -120,7 +119,7 @@ def test_reject_enrollment_request(client: TestClient, db_session: Session) -> N
     submitted = client.post(
         "/api/v1/agent/enroll/request",
         headers={"Authorization": f"Bearer {key['api_key']}"},
-        json={"name": "edge-01", "machine_id": "m-1"},
+        json={"name": "edge-01", "mac_addresses": ["aa:bb:cc:dd:ee:01"]},
     ).json()
 
     rejected = client.post(
@@ -152,7 +151,7 @@ def test_poll_rejects_wrong_claim_secret(client: TestClient, db_session: Session
     submitted = client.post(
         "/api/v1/agent/enroll/request",
         headers={"Authorization": f"Bearer {key['api_key']}"},
-        json={"machine_id": "m-1"},
+        json={"mac_addresses": ["aa:bb:cc:dd:ee:01"]},
     ).json()
 
     response = client.post(
@@ -176,7 +175,7 @@ def test_member_cannot_approve(client: TestClient, db_session: Session) -> None:
     submitted = client.post(
         "/api/v1/agent/enroll/request",
         headers={"Authorization": f"Bearer {key['api_key']}"},
-        json={"machine_id": "m-1"},
+        json={"mac_addresses": ["aa:bb:cc:dd:ee:01"]},
     ).json()
 
     member_headers = auth_header(client, "member@example.com")
@@ -196,7 +195,7 @@ def test_expired_request_is_reported_on_poll(client: TestClient, db_session: Ses
     submitted = client.post(
         "/api/v1/agent/enroll/request",
         headers={"Authorization": f"Bearer {key['api_key']}"},
-        json={"machine_id": "m-1"},
+        json={"mac_addresses": ["aa:bb:cc:dd:ee:01"]},
     ).json()
 
     request = db_session.get(DeviceEnrollmentRequest, UUID(submitted["request_id"]))
@@ -219,7 +218,7 @@ def test_invalid_api_key_rejected(client: TestClient) -> None:
     response = client.post(
         "/api/v1/agent/enroll/request",
         headers={"Authorization": "Bearer key_does-not-exist"},
-        json={"machine_id": "m-1"},
+        json={"mac_addresses": ["aa:bb:cc:dd:ee:01"]},
     )
     assert response.status_code == 401
     assert response.json()["error"]["code"] == "invalid_api_key"

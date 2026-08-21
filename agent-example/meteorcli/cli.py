@@ -8,7 +8,9 @@ Subcommands
   request-token  Ask the API for a device token; wait briefly for admin approval.
   claim          Collect the device token after a later approval.
   run        Send periodic heartbeats.
-  status     Show persisted (non-secret) configuration.
+  mqtt-test    Publish one TLS MQTT message (default: devices/{id}/events).
+  mqtt-listen  Print messages on a device topic (default: devices/{id}/events).
+  status       Show persisted (non-secret) configuration.
 
 Secrets are never printed by any command except when the user explicitly
 passes them on the command line.
@@ -79,8 +81,7 @@ def _finish_config_write(paths: CliPaths) -> None:
     chown_config_dir(paths.config_path.parent)
     if os.environ.get("SUDO_USER") and os.geteuid() == 0:
         print(
-            f"note: sudo is not required; config is stored for {os.environ['SUDO_USER']} "
-            f"at {paths.config_path.parent}",
+            f"note: sudo is not required; config is stored for {os.environ['SUDO_USER']} at {paths.config_path.parent}",
             file=sys.stderr,
         )
 
@@ -136,8 +137,7 @@ def _cmd_config(args: argparse.Namespace) -> int:
 
     if not domain and not api_base and not api_key:
         print(
-            f"error: provide --domain, --api-base, and/or --api-key "
-            f"(or {ENV_DOMAIN}/{ENV_API_KEY}).",
+            f"error: provide --domain, --api-base, and/or --api-key (or {ENV_DOMAIN}/{ENV_API_KEY}).",
             file=sys.stderr,
         )
         return 2
@@ -157,8 +157,7 @@ def _cmd_register(args: argparse.Namespace) -> int:
     server = _resolve_server(args, config)
     if not server:
         print(
-            f"error: a server URL is required "
-            f"(use --server, {ENV_SERVER}, or '{PROG} config --domain').",
+            f"error: a server URL is required (use --server, {ENV_SERVER}, or '{PROG} config --domain').",
             file=sys.stderr,
         )
         return 2
@@ -205,9 +204,15 @@ def _persist_claimed_device(
     client: EdgeClient,
     poll: dict,
 ) -> None:
-    from edge_agent.credentials import write_device_token
+    from edge_agent.mqtt_config import mqtt_from_api_payload
+    from edge_agent.persist import persist_device_secrets
 
-    write_device_token(paths.token_path, poll["device_token"])
+    persist_device_secrets(
+        paths.config_path.parent,
+        paths.token_path,
+        poll["device_token"],
+        mqtt_from_api_payload(poll),
+    )
     existing = _load(paths) or AgentConfig(server_url=client.server_url)
     existing.server_url = client.server_url
     existing.device_id = str(poll["device_id"])
@@ -328,8 +333,7 @@ def _poll_enrollment(
             if error.status == 429:
                 polls += 1
                 print(
-                    f"Server asked to slow down; waiting {RATE_LIMIT_BACKOFF_SECONDS}s "
-                    "before the next poll…",
+                    f"Server asked to slow down; waiting {RATE_LIMIT_BACKOFF_SECONDS}s before the next poll…",
                     file=sys.stderr,
                 )
                 if wait_seconds == 0 or polls >= poll_cap or time.monotonic() >= deadline:
@@ -359,8 +363,7 @@ def _cmd_request(args: argparse.Namespace) -> int:
     server = _resolve_server(args, config)
     if not server:
         print(
-            f"error: a server URL is required "
-            f"(use --server, {ENV_SERVER}, or '{PROG} config --domain').",
+            f"error: a server URL is required (use --server, {ENV_SERVER}, or '{PROG} config --domain').",
             file=sys.stderr,
         )
         return 2
@@ -368,8 +371,7 @@ def _cmd_request(args: argparse.Namespace) -> int:
     api_key = _resolve_api_key(args, paths)
     if not api_key:
         print(
-            f"error: an API key is required "
-            f"(use --api-key, {ENV_API_KEY}, or '{PROG} config --api-key').",
+            f"error: an API key is required (use --api-key, {ENV_API_KEY}, or '{PROG} config --api-key').",
             file=sys.stderr,
         )
         return 2
@@ -439,8 +441,7 @@ def _cmd_claim(args: argparse.Namespace) -> int:
     server = _resolve_server(args, config)
     if not server:
         print(
-            f"error: a server URL is required "
-            f"(use --server, {ENV_SERVER}, or '{PROG} config --domain').",
+            f"error: a server URL is required (use --server, {ENV_SERVER}, or '{PROG} config --domain').",
             file=sys.stderr,
         )
         return 2
@@ -457,10 +458,7 @@ def _cmd_claim(args: argparse.Namespace) -> int:
     client = EdgeClient(server)
     wait_seconds = max(0, int(args.wait))
     if wait_seconds > 0:
-        print(
-            f"Checking enrollment request {pending['request_id']} "
-            f"(waiting up to {wait_seconds}s)…"
-        )
+        print(f"Checking enrollment request {pending['request_id']} (waiting up to {wait_seconds}s)…")
     return _poll_enrollment(
         paths,
         client,
@@ -479,8 +477,7 @@ def _cmd_test(args: argparse.Namespace) -> int:
     server = _resolve_server(args, config)
     if not server:
         print(
-            f"error: a server URL is required "
-            f"(use --server, {ENV_SERVER}, or '{PROG} config --domain').",
+            f"error: a server URL is required (use --server, {ENV_SERVER}, or '{PROG} config --domain').",
             file=sys.stderr,
         )
         if os.geteuid() != 0 and Path("/etc/meteorcli/config.json").exists():
@@ -508,8 +505,7 @@ def _cmd_test(args: argparse.Namespace) -> int:
     if not api_key:
         print("API key:        MISSING")
         print(
-            f"error: an API key is required "
-            f"(use --api-key, {ENV_API_KEY}, or '{PROG} config --api-key').",
+            f"error: an API key is required (use --api-key, {ENV_API_KEY}, or '{PROG} config --api-key').",
             file=sys.stderr,
         )
         return 1
@@ -540,16 +536,14 @@ def _load_or_fail(paths: CliPaths) -> tuple[AgentConfig, str] | None:
     config = _load(paths)
     if config is None or not config.device_id:
         print(
-            f"error: this device is not registered. "
-            f"Run '{PROG} register' or '{PROG} request-token' first.",
+            f"error: this device is not registered. Run '{PROG} register' or '{PROG} request-token' first.",
             file=sys.stderr,
         )
         return None
     device_token = read_device_token(paths.token_path)
     if device_token is None:
         print(
-            f"error: device credential is missing. "
-            f"Re-register with '{PROG} register' or '{PROG} request-token'.",
+            f"error: device credential is missing. Re-register with '{PROG} register' or '{PROG} request-token'.",
             file=sys.stderr,
         )
         return None
@@ -574,8 +568,21 @@ def _cmd_run(args: argparse.Namespace) -> int:
         return 0
 
     interval = args.interval or config.heartbeat_interval_seconds
+    mqtt_session = None
+    from edge_agent.mqtt import DeviceMqttSession
+    from edge_agent.mqtt_config import read_mqtt_config
+
     logger.info("Starting heartbeat loop every %ss", interval)
     try:
+        try:
+            mqtt_config = read_mqtt_config(paths.config_path.parent)
+            if mqtt_config is not None and config.device_id:
+                mqtt_session = DeviceMqttSession(
+                    config.device_id, mqtt_config, server_url=config.server_url
+                )
+                mqtt_session.start()
+        except Exception:
+            logger.exception("MQTT failed to start; continuing with heartbeats")
         run_loop(
             client,
             device_token,
@@ -587,6 +594,9 @@ def _cmd_run(args: argparse.Namespace) -> int:
         return 1
     except KeyboardInterrupt:  # pragma: no cover - interactive only
         logger.info("Stopping heartbeat loop.")
+    finally:
+        if mqtt_session is not None:
+            mqtt_session.stop()
     return 0
 
 
@@ -607,10 +617,114 @@ def _cmd_status(args: argparse.Namespace) -> int:
     print(f"Name:           {config.name if config and config.name else '—'}")
     print(f"Heartbeat:      every {config.heartbeat_interval_seconds if config else 60}s")
     print(f"Credential:     {'present' if has_credential else 'MISSING'}")
+    from edge_agent.mqtt_config import read_mqtt_config
+
+    mqtt_ok = read_mqtt_config(paths.config_path.parent) is not None
+    print(f"MQTT:           {'configured' if mqtt_ok else 'not configured'}")
     pending = _load_pending_claim(paths)
     if pending is not None:
         print(f"Pending claim:  {pending['request_id']} (run '{PROG} claim')")
     return 0 if config and config.device_id else 1
+
+
+def _mqtt_config_or_fail(paths, config):
+    from edge_agent.mqtt_config import read_mqtt_config
+
+    mqtt_config = read_mqtt_config(paths.config_path.parent)
+    if mqtt_config is None or not config.device_id:
+        print(
+            "error: MQTT is not configured. Re-register or claim this device "
+            "so mqtt.json is written next to the HTTP credential.",
+            file=sys.stderr,
+        )
+        return None
+    return mqtt_config
+
+
+def _cmd_mqtt_test(args: argparse.Namespace) -> int:
+    paths = _paths_from_args(args)
+    loaded = _load_or_fail(paths)
+    if loaded is None:
+        return 1
+    config, _device_token = loaded
+    from datetime import UTC, datetime
+
+    from edge_agent.mqtt import normalize_device_topic, publish_test_event
+
+    mqtt_config = _mqtt_config_or_fail(paths, config)
+    if mqtt_config is None:
+        return 1
+    try:
+        topic = normalize_device_topic(config.device_id, args.topic)
+        if args.message is None:
+            payload: dict | str = {
+                "source": "meteorcli",
+                "message": "mqtt-test",
+                "sent_at": datetime.now(UTC).isoformat(),
+            }
+        else:
+            raw = args.message.strip()
+            if raw.startswith("{") or raw.startswith("["):
+                payload = json.loads(raw)
+            else:
+                payload = args.message
+    except (ValueError, json.JSONDecodeError) as error:
+        print(f"error: {error}", file=sys.stderr)
+        return 1
+    try:
+        published_topic = publish_test_event(
+            config.device_id,
+            mqtt_config,
+            payload,
+            topic=topic,
+            server_url=config.server_url,
+        )
+    except Exception as error:
+        logger.exception("MQTT test publish failed")
+        print(f"error: MQTT test failed: {error}", file=sys.stderr)
+        return 1
+    print(f"Published MQTT test message to {published_topic}")
+    return 0
+
+
+def _cmd_mqtt_listen(args: argparse.Namespace) -> int:
+    paths = _paths_from_args(args)
+    loaded = _load_or_fail(paths)
+    if loaded is None:
+        return 1
+    config, _device_token = loaded
+    from edge_agent.mqtt import listen_mqtt, normalize_device_topic
+
+    mqtt_config = _mqtt_config_or_fail(paths, config)
+    if mqtt_config is None:
+        return 1
+    try:
+        topic = normalize_device_topic(config.device_id, args.topic)
+    except ValueError as error:
+        print(f"error: {error}", file=sys.stderr)
+        return 1
+    print(f"Listening on {topic} (Ctrl+C to stop)", flush=True)
+
+    def _print_message(message_topic: str, payload: str) -> None:
+        print(f"{message_topic} {payload}", flush=True)
+
+    try:
+        listen_mqtt(
+            config.device_id,
+            mqtt_config,
+            topic=topic,
+            server_url=config.server_url,
+            timeout=args.timeout,
+            on_message=_print_message,
+        )
+    except KeyboardInterrupt:
+        print("Stopped listening", file=sys.stderr)
+        return 0
+    except Exception as error:
+        logger.exception("MQTT listen failed")
+        print(f"error: MQTT listen failed: {error}", file=sys.stderr)
+        return 1
+    return 0
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -626,6 +740,10 @@ def build_parser() -> argparse.ArgumentParser:
             f"  {PROG} claim\n"
             f"  {PROG} register --token reg_XXXX\n"
             f"  {PROG} run\n"
+            f"  {PROG} mqtt-test\n"
+            f"  {PROG} mqtt-test devices/DEVICE_ID/events '{{\"hello\":true}}'\n"
+            f"  {PROG} mqtt-listen\n"
+            f"  {PROG} mqtt-listen devices/DEVICE_ID/commands\n"
             f"  {PROG} status\n"
             "\n"
             "Environment variables:\n"
@@ -689,8 +807,7 @@ def build_parser() -> argparse.ArgumentParser:
         "test",
         help="Check that the server is reachable and the API key is valid.",
         description=(
-            "Reach the control plane and authenticate with the stored API key. "
-            "Does not create an enrollment request."
+            "Reach the control plane and authenticate with the stored API key. Does not create an enrollment request."
         ),
     )
     test_parser.add_argument(
@@ -778,10 +895,7 @@ def build_parser() -> argparse.ArgumentParser:
         type=int,
         default=DEFAULT_ENROLL_WAIT_SECONDS,
         metavar="SECONDS",
-        help=(
-            "How long to poll for approval "
-            f"(default: {DEFAULT_ENROLL_WAIT_SECONDS}; 0 submits and exits)."
-        ),
+        help=(f"How long to poll for approval (default: {DEFAULT_ENROLL_WAIT_SECONDS}; 0 submits and exits)."),
     )
     request_parser.add_argument(
         "--new",
@@ -827,6 +941,55 @@ def build_parser() -> argparse.ArgumentParser:
         help="Override the heartbeat interval.",
     )
     run_parser.set_defaults(func=_cmd_run)
+
+    mqtt_test_parser = subparsers.add_parser(
+        "mqtt-test",
+        help="Publish one MQTT test message over TLS.",
+        description=(
+            "Publish to a device topic using mqtt.json. With no topic, uses "
+            "devices/{device_id}/events (same as the Fleet MQTT test page). "
+            "Optional message is JSON if it starts with { or [, otherwise raw text."
+        ),
+    )
+    mqtt_test_parser.add_argument(
+        "topic",
+        nargs="?",
+        default=None,
+        help="Topic or suffix (default: events). Must be under this device.",
+    )
+    mqtt_test_parser.add_argument(
+        "message",
+        nargs="?",
+        default=None,
+        help="Payload to publish (default: a small mqtt-test JSON object).",
+    )
+    mqtt_test_parser.set_defaults(func=_cmd_mqtt_test)
+
+    mqtt_listen_parser = subparsers.add_parser(
+        "mqtt-listen",
+        help="Print MQTT messages on a device topic.",
+        description=(
+            "Subscribe to a device topic over TLS and print payloads. "
+            "With no topic, uses devices/{device_id}/events (same as the Fleet "
+            "MQTT test page). Other topics must still belong to this device. "
+            "Does not answer ping. Uses a unique MQTT client id so meteorcli run "
+            "stays connected."
+        ),
+    )
+    mqtt_listen_parser.add_argument(
+        "topic",
+        nargs="?",
+        default=None,
+        help="Topic or suffix (default: events). Must be under this device.",
+    )
+    mqtt_listen_parser.add_argument(
+        "--timeout",
+        type=float,
+        default=None,
+        metavar="SECONDS",
+        help="Stop after this many seconds (default: until Ctrl+C).",
+    )
+    mqtt_listen_parser.set_defaults(func=_cmd_mqtt_listen)
 
     status_parser = subparsers.add_parser(
         "status",

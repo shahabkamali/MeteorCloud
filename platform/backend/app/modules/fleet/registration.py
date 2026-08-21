@@ -25,6 +25,7 @@ from app.modules.fleet.schemas import (
 )
 from app.modules.fleet.status import connectivity_status
 from app.modules.fleet.tokens import generate_device_token, hash_token
+from app.modules.mqtt.credentials import issue_mqtt_credentials
 
 
 class RegistrationService:
@@ -45,13 +46,11 @@ class RegistrationService:
         token = self._validate_token(payload.token)
 
         identity = DeviceIdentity.from_inventory(
-            machine_id=payload.machine_id,
             serial_number=payload.serial_number,
             mac_addresses=payload.mac_addresses,
         )
 
         candidates = self.devices.list_candidates_for_identity(
-            machine_id=identity.machine_id,
             serial_number=identity.serial_number,
             mac_addresses=identity.mac_addresses,
         )
@@ -82,6 +81,8 @@ class RegistrationService:
         token.use_count += 1
         self.tokens.update(token)
 
+        mqtt = issue_mqtt_credentials(self.session, device, self.settings)
+
         self.session.commit()
         self.session.refresh(device)
 
@@ -91,6 +92,7 @@ class RegistrationService:
             organization_id=device.organization_id,
             name=device.name,
             heartbeat_interval_seconds=self.settings.device_heartbeat_interval_seconds,
+            mqtt=mqtt,
         )
 
     def _validate_token(self, plaintext: str) -> RegistrationToken:
@@ -122,12 +124,9 @@ class RegistrationService:
         return token
 
     def _resolve_name(self, payload: AgentRegisterRequest, identity: DeviceIdentity) -> str:
-        candidate = (
-            payload.name
-            or payload.hostname
-            or identity.machine_id
-            or identity.serial_number
-        )
+        candidate = payload.name or payload.hostname or identity.serial_number
+        if not candidate and identity.mac_addresses:
+            candidate = identity.mac_addresses[0]
         if candidate:
             return candidate.strip()[:255]
         return "unnamed-device"
@@ -138,7 +137,6 @@ class RegistrationService:
         payload: AgentRegisterRequest,
         identity: DeviceIdentity,
     ) -> None:
-        device.machine_id = identity.machine_id
         device.serial_number = identity.serial_number
         device.mac_addresses = identity.mac_addresses
         device.hostname = payload.hostname

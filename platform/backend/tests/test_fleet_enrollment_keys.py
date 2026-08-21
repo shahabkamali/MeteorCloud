@@ -73,7 +73,7 @@ def test_revoke_enrollment_key(client: TestClient, db_session: Session) -> None:
     response = client.post(
         "/api/v1/agent/enroll/request",
         headers={"Authorization": f"Bearer {created['api_key']}"},
-        json={"name": "edge-01", "machine_id": "m-1"},
+        json={"name": "edge-01", "mac_addresses": ["aa:bb:cc:dd:ee:01"]},
     )
     assert response.status_code == 401
     assert response.json()["error"]["code"] == "invalid_api_key"

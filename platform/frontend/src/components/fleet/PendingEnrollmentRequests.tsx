@@ -15,6 +15,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { formatDateTime } from "@/lib/utils";
 
+function isActiveEnrollmentRequest(entry: DeviceEnrollmentRequest): boolean {
+  return entry.status === "pending" || (entry.status === "approved" && entry.claimed_at == null);
+}
+
 type PendingEnrollmentRequestsProps = {
   organizationId: string;
   token: string;
@@ -52,12 +56,12 @@ export function PendingEnrollmentRequests({
     enabled: Boolean(token && organizationId),
   });
 
-  const pendingRequests = useMemo(
-    () => (requestsQuery.data ?? []).filter((entry) => entry.status === "pending"),
+  const activeRequests = useMemo(
+    () => (requestsQuery.data ?? []).filter(isActiveEnrollmentRequest),
     [requestsQuery.data],
   );
 
-  if (hideWhenEmpty && pendingRequests.length === 0) {
+  if (hideWhenEmpty && activeRequests.length === 0) {
     return null;
   }
 
@@ -76,9 +80,10 @@ export function PendingEnrollmentRequests({
       setApproveName("");
       setApproveTypeId("");
       setApproveGroupId("");
-      await queryClient.invalidateQueries({
-        queryKey: ["enrollment-requests", organizationId],
-      });
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["enrollment-requests", organizationId] }),
+        queryClient.invalidateQueries({ queryKey: ["devices", organizationId] }),
+      ]);
     } catch (err) {
       onError?.(err instanceof ApiError ? err.message : "Could not approve the request.");
     }
@@ -107,49 +112,69 @@ export function PendingEnrollmentRequests({
             <tr>
               <th className="px-4 py-3 font-semibold">Name</th>
               <th className="px-4 py-3 font-semibold">Hostname</th>
-              <th className="px-4 py-3 font-semibold">Machine ID</th>
+              <th className="px-4 py-3 font-semibold">MAC address</th>
               <th className="px-4 py-3 font-semibold">Architecture</th>
               <th className="px-4 py-3 font-semibold">Requested</th>
+              <th className="px-4 py-3 font-semibold">Status</th>
               {canManage && <th className="px-4 py-3 font-semibold">Actions</th>}
             </tr>
           </thead>
           <tbody>
-            {pendingRequests.map((entry) => (
+            {activeRequests.map((entry) => (
               <tr key={entry.id} className="border-b border-border/70">
-                <td className="px-4 py-3 font-medium">{entry.requested_name ?? "—"}</td>
+                <td className="px-4 py-3 font-medium">
+                  {entry.assigned_name ?? entry.requested_name ?? "—"}
+                </td>
                 <td className="px-4 py-3 text-muted-foreground">{entry.hostname ?? "—"}</td>
-                <td className="px-4 py-3 font-mono text-xs">{entry.machine_id ?? "—"}</td>
+                <td className="px-4 py-3 font-mono text-xs">
+                  {entry.mac_addresses.length ? entry.mac_addresses.join(", ") : "—"}
+                </td>
                 <td className="px-4 py-3 text-muted-foreground">{entry.architecture ?? "—"}</td>
                 <td className="px-4 py-3 text-muted-foreground">
                   {formatDateTime(entry.created_at)}
                 </td>
+                <td className="px-4 py-3">
+                  {entry.status === "approved" ? (
+                    <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800">
+                      Awaiting device
+                    </span>
+                  ) : (
+                    <span className="rounded-full bg-sky-100 px-2 py-0.5 text-xs font-medium text-sky-800">
+                      Pending approval
+                    </span>
+                  )}
+                </td>
                 {canManage && (
                   <td className="px-4 py-3">
-                    <div className="flex gap-2">
-                      <Button
-                        size="sm"
-                        onClick={() => {
-                          setApproveId(entry.id);
-                          setApproveName(entry.requested_name ?? "");
-                          setApproveTypeId(entry.device_type_id ?? "");
-                          setApproveGroupId(entry.device_group_id ?? "");
-                        }}
-                      >
-                        Approve
-                      </Button>
-                      <Button variant="ghost" size="sm" onClick={() => onReject(entry)}>
-                        Reject
-                      </Button>
-                    </div>
+                    {entry.status === "pending" ? (
+                      <div className="flex gap-2">
+                        <Button
+                          size="sm"
+                          onClick={() => {
+                            setApproveId(entry.id);
+                            setApproveName(entry.requested_name ?? "");
+                            setApproveTypeId(entry.device_type_id ?? "");
+                            setApproveGroupId(entry.device_group_id ?? "");
+                          }}
+                        >
+                          Approve
+                        </Button>
+                        <Button variant="ghost" size="sm" onClick={() => onReject(entry)}>
+                          Reject
+                        </Button>
+                      </div>
+                    ) : (
+                      <span className="text-xs text-muted-foreground">Waiting for claim</span>
+                    )}
                   </td>
                 )}
               </tr>
             ))}
-            {pendingRequests.length === 0 && (
+            {activeRequests.length === 0 && (
               <tr>
                 <td
                   className="px-4 py-6 text-center text-muted-foreground"
-                  colSpan={canManage ? 6 : 5}
+                  colSpan={canManage ? 7 : 6}
                 >
                   No pending enrollment requests.
                 </td>

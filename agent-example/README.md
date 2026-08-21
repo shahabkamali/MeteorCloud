@@ -1,8 +1,8 @@
 # meteorcli (device agent)
 
 `meteorcli` is the MeteorCloud device command. It runs on managed Linux devices,
-registers them with the control plane, and sends periodic heartbeats. It uses
-only the Python standard library so it runs on minimal devices.
+registers them with the control plane, sends heartbeats, and maintains a TLS MQTT
+session (`paho-mqtt`).
 
 There are **two ways** to enroll a device:
 
@@ -53,7 +53,7 @@ meteorcli --version
 | `register`       | Enroll with a one-time registration token (admin-initiated).         |
 | `request-token`  | Request a device token to connect this machine to the API.           |
 | `claim`          | Collect the device token after a later approval.                     |
-| `run`            | Send heartbeats (loop, or `--once`).                                 |
+| `run`            | Send heartbeats and keep an MQTT session (loop, or `--once`).     |
 | `status`         | Show persisted, non-secret configuration.                            |
 
 Environment variables: `METEORCLI_DOMAIN`, `METEORCLI_SERVER`, `METEORCLI_API_KEY`,

@@ -20,14 +20,6 @@ def _read_text(path: str) -> str | None:
         return None
 
 
-def read_machine_id() -> str | None:
-    for path in ("/etc/machine-id", "/var/lib/dbus/machine-id"):
-        value = _read_text(path)
-        if value:
-            return value
-    return None
-
-
 def read_os_release() -> tuple[str | None, str | None]:
     """Return (os_name, os_version) parsed from /etc/os-release."""
     content = _read_text("/etc/os-release")
@@ -118,7 +110,6 @@ def collect_inventory() -> dict[str, Any]:
         hostname = None
 
     return {
-        "machine_id": read_machine_id(),
         "serial_number": read_serial_number(),
         "mac_addresses": read_mac_addresses(),
         "hostname": hostname,

@@ -7,6 +7,7 @@ RBAC before touching data, guaranteeing tenant isolation.
 
 from __future__ import annotations
 
+import json
 import uuid
 from datetime import UTC, datetime
 from typing import Any
@@ -20,6 +21,7 @@ from app.modules.fleet.models import (
     Device,
     DeviceEnrollmentRequest,
     DeviceGroup,
+    DeviceMqttCredential,
     DeviceType,
     EnrollmentApiKey,
     RegistrationToken,
@@ -61,6 +63,8 @@ from app.modules.fleet.tokens import (
     generate_registration_token,
 )
 from app.modules.identity.models import User
+from app.modules.mqtt.schemas import DevicePingResponse, MqttTestPublishResponse
+from app.modules.mqtt.service import MqttPublisher, MqttService
 from app.modules.organizations.models import OrganizationMembership, OrganizationRole
 from app.modules.organizations.repository import OrganizationRepository
 
@@ -127,8 +131,7 @@ class FleetService:
     ) -> list[DeviceTypeResponse]:
         self._require_membership(organization_id, actor.id)
         return [
-            DeviceTypeResponse.model_validate(item)
-            for item in self.device_types.list(organization_id=organization_id)
+            DeviceTypeResponse.model_validate(item) for item in self.device_types.list(organization_id=organization_id)
         ]
 
     def get_device_type(
@@ -180,9 +183,7 @@ class FleetService:
         device_type = self._require_device_type(organization_id, type_id)
 
         if payload.name is not None and payload.name.lower() != device_type.name.lower():
-            existing = self.device_types.get_by_name(
-                organization_id=organization_id, name=payload.name
-            )
+            existing = self.device_types.get_by_name(organization_id=organization_id, name=payload.name)
             if existing is not None and existing.id != device_type.id:
                 raise ConflictError(
                     "device_type_exists",
@@ -286,9 +287,7 @@ class FleetService:
         group = self._require_device_group(organization_id, group_id)
 
         if payload.name is not None and payload.name.lower() != group.name.lower():
-            existing = self.device_groups.get_by_name(
-                organization_id=organization_id, name=payload.name
-            )
+            existing = self.device_groups.get_by_name(organization_id=organization_id, name=payload.name)
             if existing is not None and existing.id != group.id:
                 raise ConflictError(
                     "device_group_exists",
@@ -339,8 +338,7 @@ class FleetService:
     ) -> list[RegistrationTokenResponse]:
         self._require_membership(organization_id, actor.id)
         return [
-            RegistrationTokenResponse.model_validate(item)
-            for item in self.tokens.list(organization_id=organization_id)
+            RegistrationTokenResponse.model_validate(item) for item in self.tokens.list(organization_id=organization_id)
         ]
 
     def create_registration_token(
@@ -515,9 +513,7 @@ class FleetService:
         self._require_membership(organization_id, actor.id)
         return [
             DeviceEnrollmentRequestResponse.model_validate(item)
-            for item in self.enrollment_requests.list(
-                organization_id=organization_id, status=status
-            )
+            for item in self.enrollment_requests.list(organization_id=organization_id, status=status)
         ]
 
     def approve_enrollment_request(
@@ -592,12 +588,8 @@ class FleetService:
         self.session.refresh(request)
         return DeviceEnrollmentRequestResponse.model_validate(request)
 
-    def _require_enrollment_request(
-        self, organization_id: uuid.UUID, request_id: uuid.UUID
-    ) -> DeviceEnrollmentRequest:
-        request = self.enrollment_requests.get(
-            organization_id=organization_id, request_id=request_id
-        )
+    def _require_enrollment_request(self, organization_id: uuid.UUID, request_id: uuid.UUID) -> DeviceEnrollmentRequest:
+        request = self.enrollment_requests.get(organization_id=organization_id, request_id=request_id)
         if request is None:
             raise NotFoundError(
                 "enrollment_request_not_found",
@@ -623,9 +615,7 @@ class FleetService:
         page_size: int = 20,
     ) -> Page[DeviceResponse]:
         self._require_membership(organization_id, actor.id)
-        cutoff = offline_cutoff(
-            offline_threshold_seconds=self.settings.device_offline_threshold_seconds
-        )
+        cutoff = offline_cutoff(offline_threshold_seconds=self.settings.device_offline_threshold_seconds)
         devices, total = self.devices.list_paginated(
             organization_id=organization_id,
             search=search,
@@ -769,6 +759,79 @@ class FleetService:
         self.session.refresh(device)
         return self._to_device_response(device)
 
+    def ping_device(
+        self,
+        *,
+        actor: User,
+        organization_id: uuid.UUID,
+        device_id: uuid.UUID,
+        publisher: MqttPublisher,
+    ) -> DevicePingResponse:
+        membership = self._require_membership(organization_id, actor.id)
+        self._require_manage(membership.role)
+        self._require_device(organization_id, device_id)
+        return MqttService(self.session, settings=self.settings).send_ping(
+            organization_id=organization_id,
+            device_id=device_id,
+            publisher=publisher,
+        )
+
+    def require_mqtt_listener(
+        self,
+        *,
+        actor: User,
+        organization_id: uuid.UUID,
+        device_id: uuid.UUID | None,
+        topic: str | None,
+    ) -> str:
+        from app.modules.mqtt.topics import validate_mqtt_topic
+
+        self._require_membership(organization_id, actor.id)
+        if device_id is not None:
+            self._require_device(organization_id, device_id)
+            resolved = topic or f"devices/{device_id}/events"
+        else:
+            resolved = topic or ""
+        return validate_mqtt_topic(resolved, allow_wildcards=True)
+
+    def publish_mqtt_test_event(
+        self,
+        *,
+        actor: User,
+        organization_id: uuid.UUID,
+        device_id: uuid.UUID | None,
+        topic: str | None,
+        payload: str | dict[str, Any] | None,
+        publisher: MqttPublisher,
+    ) -> MqttTestPublishResponse:
+        from app.core.exceptions import ValidationAppError
+        from app.modules.mqtt.topics import validate_mqtt_topic
+
+        membership = self._require_membership(organization_id, actor.id)
+        self._require_manage(membership.role)
+        if device_id is not None:
+            self._require_device(organization_id, device_id)
+            resolved = topic or f"devices/{device_id}/events"
+        else:
+            if not topic:
+                raise ValidationAppError("mqtt_topic_required", "A topic is required.")
+            resolved = topic
+        resolved = validate_mqtt_topic(resolved, allow_wildcards=False)
+        if isinstance(payload, dict):
+            text = json.dumps(payload)
+        elif payload is None:
+            text = "hello from console"
+        else:
+            text = payload
+        try:
+            publisher.publish(resolved, text, qos=1, retain=False)
+        except Exception as exc:
+            raise ConflictError(
+                "mqtt_unavailable",
+                "Could not publish to the MQTT broker.",
+            ) from exc
+        return MqttTestPublishResponse(topic=resolved, payload=text)
+
     def _require_device(self, organization_id: uuid.UUID, device_id: uuid.UUID) -> Device:
         device = self.devices.get(organization_id=organization_id, device_id=device_id)
         if device is None:
@@ -788,7 +851,6 @@ class FleetService:
             device_group_id=device.device_group_id,
             is_enabled=device.is_enabled,
             status=status,
-            machine_id=device.machine_id,
             serial_number=device.serial_number,
             mac_addresses=device.mac_addresses,
             hostname=device.hostname,
@@ -806,4 +868,11 @@ class FleetService:
             registered_at=device.registered_at,
             created_at=device.created_at,
             updated_at=device.updated_at,
+            mqtt_configured=self._mqtt_configured(device.id),
+            mqtt_status=device.mqtt_status,
+            mqtt_status_at=device.mqtt_status_at,
         )
+
+    def _mqtt_configured(self, device_id: uuid.UUID) -> bool:
+        cred = self.session.get(DeviceMqttCredential, device_id)
+        return cred is not None and cred.revoked_at is None

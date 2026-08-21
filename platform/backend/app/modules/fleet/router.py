@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import uuid
+from queue import Empty
 from typing import Annotated
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Depends, Query
+from fastapi.responses import StreamingResponse
 
 from app.modules.fleet.dependencies import FleetSvc
 from app.modules.fleet.schemas import (
@@ -30,6 +32,10 @@ from app.modules.fleet.schemas import (
     RegistrationTokenResponse,
 )
 from app.modules.identity.dependencies import CurrentUser
+from app.modules.mqtt.broker import get_mqtt_publisher, get_mqtt_topic_watcher
+from app.modules.mqtt.hub import get_mqtt_event_hub
+from app.modules.mqtt.schemas import DevicePingResponse, MqttTestPublishRequest, MqttTestPublishResponse
+from app.modules.mqtt.service import MqttPublisher
 
 router = APIRouter(prefix="/api/v1/organizations/{organization_id}", tags=["fleet"])
 
@@ -51,9 +57,7 @@ def create_device_type(
     current_user: CurrentUser,
     service: FleetSvc,
 ) -> DeviceTypeResponse:
-    return service.create_device_type(
-        actor=current_user, organization_id=organization_id, payload=payload
-    )
+    return service.create_device_type(actor=current_user, organization_id=organization_id, payload=payload)
 
 
 @router.get("/device-types/{type_id}", response_model=DeviceTypeResponse)
@@ -63,9 +67,7 @@ def get_device_type(
     current_user: CurrentUser,
     service: FleetSvc,
 ) -> DeviceTypeResponse:
-    return service.get_device_type(
-        actor=current_user, organization_id=organization_id, type_id=type_id
-    )
+    return service.get_device_type(actor=current_user, organization_id=organization_id, type_id=type_id)
 
 
 @router.patch("/device-types/{type_id}", response_model=DeviceTypeResponse)
@@ -111,9 +113,7 @@ def create_device_group(
     current_user: CurrentUser,
     service: FleetSvc,
 ) -> DeviceGroupResponse:
-    return service.create_device_group(
-        actor=current_user, organization_id=organization_id, payload=payload
-    )
+    return service.create_device_group(actor=current_user, organization_id=organization_id, payload=payload)
 
 
 @router.get("/device-groups/{group_id}", response_model=DeviceGroupResponse)
@@ -123,9 +123,7 @@ def get_device_group(
     current_user: CurrentUser,
     service: FleetSvc,
 ) -> DeviceGroupResponse:
-    return service.get_device_group(
-        actor=current_user, organization_id=organization_id, group_id=group_id
-    )
+    return service.get_device_group(actor=current_user, organization_id=organization_id, group_id=group_id)
 
 
 @router.patch("/device-groups/{group_id}", response_model=DeviceGroupResponse)
@@ -151,9 +149,7 @@ def delete_device_group(
     current_user: CurrentUser,
     service: FleetSvc,
 ) -> None:
-    service.delete_device_group(
-        actor=current_user, organization_id=organization_id, group_id=group_id
-    )
+    service.delete_device_group(actor=current_user, organization_id=organization_id, group_id=group_id)
 
 
 # ----------------------------------------------------------- registration tokens
@@ -177,9 +173,7 @@ def create_registration_token(
     current_user: CurrentUser,
     service: FleetSvc,
 ) -> RegistrationTokenCreateResponse:
-    return service.create_registration_token(
-        actor=current_user, organization_id=organization_id, payload=payload
-    )
+    return service.create_registration_token(actor=current_user, organization_id=organization_id, payload=payload)
 
 
 @router.post(
@@ -192,9 +186,7 @@ def revoke_registration_token(
     current_user: CurrentUser,
     service: FleetSvc,
 ) -> RegistrationTokenResponse:
-    return service.revoke_registration_token(
-        actor=current_user, organization_id=organization_id, token_id=token_id
-    )
+    return service.revoke_registration_token(actor=current_user, organization_id=organization_id, token_id=token_id)
 
 
 # ------------------------------------------------------------ enrollment api keys
@@ -218,9 +210,7 @@ def create_enrollment_key(
     current_user: CurrentUser,
     service: FleetSvc,
 ) -> EnrollmentApiKeyCreateResponse:
-    return service.create_enrollment_key(
-        actor=current_user, organization_id=organization_id, payload=payload
-    )
+    return service.create_enrollment_key(actor=current_user, organization_id=organization_id, payload=payload)
 
 
 @router.post(
@@ -233,9 +223,7 @@ def revoke_enrollment_key(
     current_user: CurrentUser,
     service: FleetSvc,
 ) -> EnrollmentApiKeyResponse:
-    return service.revoke_enrollment_key(
-        actor=current_user, organization_id=organization_id, key_id=key_id
-    )
+    return service.revoke_enrollment_key(actor=current_user, organization_id=organization_id, key_id=key_id)
 
 
 # ------------------------------------------------------- enrollment requests
@@ -252,9 +240,7 @@ def list_enrollment_requests(
         Query(pattern="^(pending|approved|rejected|expired)$"),
     ] = None,
 ) -> list[DeviceEnrollmentRequestResponse]:
-    return service.list_enrollment_requests(
-        actor=current_user, organization_id=organization_id, status=status
-    )
+    return service.list_enrollment_requests(actor=current_user, organization_id=organization_id, status=status)
 
 
 @router.post(
@@ -335,9 +321,7 @@ def get_device(
     current_user: CurrentUser,
     service: FleetSvc,
 ) -> DeviceResponse:
-    return service.get_device(
-        actor=current_user, organization_id=organization_id, device_id=device_id
-    )
+    return service.get_device(actor=current_user, organization_id=organization_id, device_id=device_id)
 
 
 @router.patch("/devices/{device_id}", response_model=DeviceResponse)
@@ -363,9 +347,7 @@ def delete_device(
     current_user: CurrentUser,
     service: FleetSvc,
 ) -> None:
-    service.delete_device(
-        actor=current_user, organization_id=organization_id, device_id=device_id
-    )
+    service.delete_device(actor=current_user, organization_id=organization_id, device_id=device_id)
 
 
 @router.post("/devices/{device_id}/enable", response_model=DeviceResponse)
@@ -408,9 +390,7 @@ def rotate_device_credential(
     current_user: CurrentUser,
     service: FleetSvc,
 ) -> DeviceCredentialResponse:
-    return service.rotate_device_credential(
-        actor=current_user, organization_id=organization_id, device_id=device_id
-    )
+    return service.rotate_device_credential(actor=current_user, organization_id=organization_id, device_id=device_id)
 
 
 @router.post(
@@ -423,6 +403,85 @@ def revoke_device_credential(
     current_user: CurrentUser,
     service: FleetSvc,
 ) -> DeviceResponse:
-    return service.revoke_device_credential(
-        actor=current_user, organization_id=organization_id, device_id=device_id
+    return service.revoke_device_credential(actor=current_user, organization_id=organization_id, device_id=device_id)
+
+
+@router.post(
+    "/devices/{device_id}/commands/ping",
+    response_model=DevicePingResponse,
+)
+def ping_device(
+    organization_id: uuid.UUID,
+    device_id: uuid.UUID,
+    current_user: CurrentUser,
+    service: FleetSvc,
+    publisher: Annotated[MqttPublisher, Depends(get_mqtt_publisher)],
+) -> DevicePingResponse:
+    return service.ping_device(
+        actor=current_user,
+        organization_id=organization_id,
+        device_id=device_id,
+        publisher=publisher,
+    )
+
+
+@router.get("/mqtt/events")
+def stream_mqtt_events(
+    organization_id: uuid.UUID,
+    current_user: CurrentUser,
+    service: FleetSvc,
+    device_id: Annotated[uuid.UUID | None, Query()] = None,
+    topic: Annotated[str | None, Query()] = None,
+) -> StreamingResponse:
+    topic_filter = service.require_mqtt_listener(
+        actor=current_user,
+        organization_id=organization_id,
+        device_id=device_id,
+        topic=topic,
+    )
+    watcher = get_mqtt_topic_watcher()
+    if watcher is not None:
+        watcher.watch_topic(topic_filter)
+    hub = get_mqtt_event_hub()
+    queue = hub.subscribe(organization_id, topic_filter)
+
+    def _stream():
+        try:
+            while True:
+                try:
+                    event = queue.get(timeout=15)
+                    yield f"data: {event.sse_data()}\n\n"
+                except Empty:
+                    yield ": keepalive\n\n"
+        finally:
+            hub.unsubscribe(organization_id, topic_filter, queue)
+            if watcher is not None:
+                watcher.unwatch_topic(topic_filter)
+
+    return StreamingResponse(
+        _stream(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
+
+
+@router.post("/mqtt/publish", response_model=MqttTestPublishResponse)
+def publish_mqtt_test_event(
+    organization_id: uuid.UUID,
+    payload: MqttTestPublishRequest,
+    current_user: CurrentUser,
+    service: FleetSvc,
+    publisher: Annotated[MqttPublisher, Depends(get_mqtt_publisher)],
+) -> MqttTestPublishResponse:
+    return service.publish_mqtt_test_event(
+        actor=current_user,
+        organization_id=organization_id,
+        device_id=payload.device_id,
+        topic=payload.topic,
+        payload=payload.payload,
+        publisher=publisher,
     )

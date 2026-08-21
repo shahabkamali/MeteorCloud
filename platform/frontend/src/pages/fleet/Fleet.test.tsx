@@ -72,7 +72,6 @@ const device = {
   device_group_id: null,
   is_enabled: true,
   status: "online" as const,
-  machine_id: "machine-123",
   serial_number: null,
   mac_addresses: ["aa:bb:cc:dd:ee:ff"],
   hostname: "edge-01",
@@ -90,6 +89,9 @@ const device = {
   registered_at: new Date().toISOString(),
   created_at: new Date().toISOString(),
   updated_at: new Date().toISOString(),
+  mqtt_configured: true,
+  mqtt_status: "online" as const,
+  mqtt_status_at: new Date().toISOString(),
 };
 
 beforeEach(() => {
@@ -109,6 +111,11 @@ beforeEach(() => {
     total: 0,
     page: 1,
     page_size: 10,
+  });
+  vi.mocked(fleetApi.listenMqttEvents).mockReturnValue(() => {});
+  vi.mocked(fleetApi.publishMqttTest).mockResolvedValue({
+    topic: "devices/device-1/events",
+    payload: "hello from console",
   });
 });
 
@@ -227,7 +234,6 @@ describe("Add device flow", () => {
         assigned_name: null,
         device_type_id: null,
         device_group_id: null,
-        machine_id: "machine-xyz",
         serial_number: null,
         mac_addresses: [],
         hostname: "edge-01",
@@ -278,6 +284,30 @@ describe("Devices list", () => {
         "token-123",
         "org-1",
         expect.objectContaining({ search: "edge" }),
+      );
+    });
+  });
+
+  it("refreshes devices and pending registrations", async () => {
+    const user = userEvent.setup();
+    vi.mocked(fleetApi.listDevices).mockResolvedValue({
+      items: [device],
+      total: 1,
+      page: 1,
+      page_size: 10,
+    });
+
+    renderApp(["/organizations/org-1/devices"]);
+    await screen.findByRole("link", { name: "edge-01" });
+    const initialDeviceCalls = vi.mocked(fleetApi.listDevices).mock.calls.length;
+    const initialTokenCalls = vi.mocked(fleetApi.listRegistrationTokens).mock.calls.length;
+
+    await user.click(screen.getByRole("button", { name: /refresh devices/i }));
+
+    await waitFor(() => {
+      expect(vi.mocked(fleetApi.listDevices).mock.calls.length).toBeGreaterThan(initialDeviceCalls);
+      expect(vi.mocked(fleetApi.listRegistrationTokens).mock.calls.length).toBeGreaterThan(
+        initialTokenCalls,
       );
     });
   });
@@ -333,6 +363,54 @@ describe("Device detail", () => {
     const dialog = await screen.findByRole("dialog");
     expect(within(dialog).getByText("dev_new-secret")).toBeInTheDocument();
   });
+
+  it("sends an MQTT ping from the device detail page", async () => {
+    const user = userEvent.setup();
+    vi.mocked(fleetApi.getDevice).mockResolvedValue(device);
+    vi.mocked(fleetApi.pingDevice).mockResolvedValue({
+      command_id: "cmd-1",
+      status: "completed",
+      round_trip_ms: 120,
+      result: { message: "pong" },
+      message: null,
+    });
+
+    renderApp(["/organizations/org-1/devices/device-1"]);
+    expect(await screen.findByText("MQTT Connection")).toBeInTheDocument();
+    expect(screen.getAllByText("aa:bb:cc:dd:ee:ff").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("devices/device-1/events").length).toBeGreaterThan(0);
+    expect(screen.getByText(/meteorcli mqtt-test/)).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /test connection/i }));
+    expect(await screen.findByText(/connection test successful/i)).toBeInTheDocument();
+    expect(screen.getByText(/round trip: 120 ms/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /test connection/i })).toBeEnabled();
+  });
+
+  it("disables Test Connection while the ping is in flight", async () => {
+    const user = userEvent.setup();
+    let resolvePing: (value: fleetApi.DevicePingResult) => void = () => {};
+    vi.mocked(fleetApi.getDevice).mockResolvedValue(device);
+    vi.mocked(fleetApi.pingDevice).mockImplementation(
+      () =>
+        new Promise<fleetApi.DevicePingResult>((resolve) => {
+          resolvePing = resolve;
+        }),
+    );
+
+    renderApp(["/organizations/org-1/devices/device-1"]);
+    const button = await screen.findByRole("button", { name: /test connection/i });
+    await user.click(button);
+    expect(button).toBeDisabled();
+    resolvePing({
+      command_id: "cmd-1",
+      status: "completed",
+      round_trip_ms: 10,
+      result: { message: "pong" },
+      message: null,
+    });
+    expect(await screen.findByText(/connection test successful/i)).toBeInTheDocument();
+    expect(button).toBeEnabled();
+  });
 });
 
 describe("API keys", () => {
@@ -374,47 +452,15 @@ describe("API keys", () => {
 
   it("approves a pending enrollment request", async () => {
     const user = userEvent.setup();
-    vi.mocked(fleetApi.listEnrollmentRequests).mockResolvedValue([
-      {
-        id: "req-1",
-        organization_id: "org-1",
-        status: "pending",
-        claim_secret_prefix: "clm_abcdef",
-        requested_name: "edge-warehouse",
-        assigned_name: null,
-        device_type_id: null,
-        device_group_id: null,
-        machine_id: "machine-xyz",
-        serial_number: null,
-        mac_addresses: [],
-        hostname: "edge-warehouse",
-        os_name: "Ubuntu",
-        os_version: null,
-        kernel_version: null,
-        architecture: "x86_64",
-        cpu_model: null,
-        cpu_cores: null,
-        memory_mb: null,
-        reviewed_by_user_id: null,
-        reviewed_at: null,
-        rejection_reason: null,
-        claimed_at: null,
-        device_id: null,
-        expires_at: null,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      },
-    ]);
-    vi.mocked(fleetApi.approveEnrollmentRequest).mockResolvedValue({
+    const pendingRequest = {
       id: "req-1",
       organization_id: "org-1",
-      status: "approved",
+      status: "pending" as const,
       claim_secret_prefix: "clm_abcdef",
       requested_name: "edge-warehouse",
-      assigned_name: "edge-warehouse",
+      assigned_name: null,
       device_type_id: null,
       device_group_id: null,
-      machine_id: "machine-xyz",
       serial_number: null,
       mac_addresses: [],
       hostname: "edge-warehouse",
@@ -425,14 +471,26 @@ describe("API keys", () => {
       cpu_model: null,
       cpu_cores: null,
       memory_mb: null,
-      reviewed_by_user_id: "user-1",
-      reviewed_at: new Date().toISOString(),
+      reviewed_by_user_id: null,
+      reviewed_at: null,
       rejection_reason: null,
       claimed_at: null,
       device_id: null,
       expires_at: null,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
+    };
+    vi.mocked(fleetApi.listEnrollmentRequests).mockResolvedValue([pendingRequest]);
+    vi.mocked(fleetApi.approveEnrollmentRequest).mockImplementation(async () => {
+      const approved = {
+        ...pendingRequest,
+        status: "approved" as const,
+        assigned_name: "edge-warehouse",
+        reviewed_by_user_id: "user-1",
+        reviewed_at: new Date().toISOString(),
+      };
+      vi.mocked(fleetApi.listEnrollmentRequests).mockResolvedValue([approved]);
+      return approved;
     });
 
     renderApp(["/organizations/org-1/api-keys"]);
@@ -449,5 +507,35 @@ describe("API keys", () => {
         expect.objectContaining({ name: "edge-warehouse" }),
       );
     });
+    expect(await screen.findByText(/awaiting device/i)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^approve$/i })).not.toBeInTheDocument();
+  });
+});
+
+describe("MQTT test", () => {
+  it("sends and shows plain text on a typed topic", async () => {
+    const user = userEvent.setup();
+    vi.mocked(fleetApi.listenMqttEvents).mockImplementation((_token, _org, topic, onEvent) => {
+      onEvent({
+        organization_id: "org-1",
+        device_id: null,
+        topic,
+        payload: "23.5",
+        received_at: new Date().toISOString(),
+      });
+      return () => {};
+    });
+
+    renderApp(["/organizations/org-1/mqtt"]);
+    expect(await screen.findByRole("heading", { name: /mqtt test/i })).toBeInTheDocument();
+    expect(screen.queryByLabelText(/^device$/i)).not.toBeInTheDocument();
+    await user.type(screen.getByLabelText(/^topic$/i), "lab/temp");
+    await user.click(screen.getByRole("button", { name: /^listen$/i }));
+    expect(await screen.findByText("Received")).toBeInTheDocument();
+    expect(await screen.findByText("23.5")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /^stop$/i }));
+    expect(screen.getByRole("button", { name: /^listen$/i })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /^publish$/i }));
+    expect(await screen.findByText("Sent")).toBeInTheDocument();
   });
 });

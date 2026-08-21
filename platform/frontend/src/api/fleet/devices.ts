@@ -91,6 +91,25 @@ export function revokeDeviceCredential(
   );
 }
 
+export function pingDevice(
+  token: string,
+  organizationId: string,
+  deviceId: string,
+): Promise<DevicePingResult> {
+  return apiRequest<DevicePingResult>(
+    `/api/v1/organizations/${organizationId}/devices/${deviceId}/commands/ping`,
+    { method: "POST", token },
+  );
+}
+
+export type DevicePingResult = {
+  command_id: string;
+  status: string;
+  round_trip_ms: number | null;
+  result: Record<string, unknown> | null;
+  message: string | null;
+};
+
 export function deleteDevice(
   token: string,
   organizationId: string,

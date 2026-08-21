@@ -15,7 +15,6 @@ Request body (all inventory fields optional except `token`):
 {
   "token": "reg_...",
   "name": "edge-01",
-  "machine_id": "…",
   "serial_number": "…",
   "mac_addresses": ["aa:bb:cc:dd:ee:ff"],
   "hostname": "edge-01",
@@ -39,11 +38,19 @@ Response:
   "device_token": "dev_…",
   "organization_id": "…",
   "name": "edge-01",
-  "heartbeat_interval_seconds": 60
+  "heartbeat_interval_seconds": 60,
+  "mqtt": {
+    "host": "localhost",
+    "port": 8883,
+    "username": "device_<uuid>",
+    "password": "mqtt_…",
+    "tls": true
+  }
 }
 ```
 
-The `device_token` is the device's long-lived credential — store it securely.
+The `device_token` is the device's long-lived HTTP credential — store it securely.
+The MQTT password is returned only once and is stored separately from the HTTP token.
 
 ## Atomic behavior
 
@@ -53,7 +60,7 @@ count incremented — committed once, or rolled back entirely on any failure.
 
 ## Duplicate detection and re-registration
 
-Device identity is matched using machine ID, hardware serial, and overlapping
+Device identity is matched using hardware serial and overlapping
 normalized MAC addresses:
 
 - **Same organization, single match** → the existing device is updated

@@ -9,6 +9,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.modules.fleet.status import ConnectivityStatus
+from app.modules.mqtt.schemas import MqttConnectInfo
 
 
 def _strip_optional(value: str | None) -> str | None:
@@ -186,7 +187,6 @@ class DeviceResponse(BaseModel):
     device_group_id: uuid.UUID | None
     is_enabled: bool
     status: ConnectivityStatus
-    machine_id: str | None
     serial_number: str | None
     mac_addresses: list[str]
     hostname: str | None
@@ -204,6 +204,9 @@ class DeviceResponse(BaseModel):
     registered_at: datetime | None
     created_at: datetime
     updated_at: datetime
+    mqtt_configured: bool = False
+    mqtt_status: str | None = None
+    mqtt_status_at: datetime | None = None
 
 
 class DeviceUpdateRequest(BaseModel):
@@ -254,7 +257,6 @@ class DeviceCredentialResponse(BaseModel):
 class AgentRegisterRequest(BaseModel):
     token: str = Field(min_length=1)
     name: str | None = Field(default=None, max_length=255)
-    machine_id: str | None = Field(default=None, max_length=255)
     serial_number: str | None = Field(default=None, max_length=255)
     mac_addresses: list[str] = Field(default_factory=list)
     hostname: str | None = Field(default=None, max_length=255)
@@ -275,6 +277,7 @@ class AgentRegisterResponse(BaseModel):
     organization_id: uuid.UUID
     name: str
     heartbeat_interval_seconds: int
+    mqtt: MqttConnectInfo | None = None
 
 
 class AgentHeartbeatRequest(BaseModel):
@@ -347,7 +350,6 @@ class DeviceEnrollmentRequestResponse(BaseModel):
     assigned_name: str | None
     device_type_id: uuid.UUID | None
     device_group_id: uuid.UUID | None
-    machine_id: str | None
     serial_number: str | None
     mac_addresses: list[str]
     hostname: str | None
@@ -393,7 +395,6 @@ class EnrollmentRejectRequest(BaseModel):
 # --------------------------------------------------------------------------- #
 class AgentEnrollRequest(BaseModel):
     name: str | None = Field(default=None, max_length=255)
-    machine_id: str | None = Field(default=None, max_length=255)
     serial_number: str | None = Field(default=None, max_length=255)
     mac_addresses: list[str] = Field(default_factory=list)
     hostname: str | None = Field(default=None, max_length=255)
@@ -439,4 +440,5 @@ class AgentEnrollPollResponse(BaseModel):
     organization_id: uuid.UUID | None = None
     name: str | None = None
     heartbeat_interval_seconds: int | None = None
+    mqtt: MqttConnectInfo | None = None
     rejection_reason: str | None = None

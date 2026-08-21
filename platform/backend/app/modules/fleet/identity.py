@@ -1,8 +1,7 @@
 """Device identity normalization and duplicate detection.
 
-Duplicate detection combines three signals: machine ID, hardware serial, and
-overlapping normalized MAC addresses. The logic is centralized here so both the
-registration service and tests share a single source of truth.
+Duplicate detection uses hardware serial and overlapping normalized MAC
+addresses. Device ID is the platform identifier and is not a hardware signal.
 """
 
 from __future__ import annotations
@@ -56,7 +55,6 @@ def _clean(value: str | None) -> str | None:
 class DeviceIdentity:
     """Normalized identifying signals extracted from a registration request."""
 
-    machine_id: str | None = None
     serial_number: str | None = None
     mac_addresses: list[str] = field(default_factory=list)
 
@@ -64,20 +62,16 @@ class DeviceIdentity:
     def from_inventory(
         cls,
         *,
-        machine_id: str | None,
         serial_number: str | None,
         mac_addresses: list[str] | None,
     ) -> DeviceIdentity:
         return cls(
-            machine_id=_clean(machine_id),
             serial_number=_clean(serial_number),
             mac_addresses=normalize_macs(mac_addresses),
         )
 
     def matches(self, device: Device) -> bool:
         """Return whether this identity refers to the same physical device."""
-        if self.machine_id and device.machine_id and self.machine_id == device.machine_id:
-            return True
         if (
             self.serial_number
             and device.serial_number

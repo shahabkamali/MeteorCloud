@@ -46,13 +46,11 @@ class RegistrationService:
         token = self._validate_token(payload.token)
 
         identity = DeviceIdentity.from_inventory(
-            machine_id=payload.machine_id,
             serial_number=payload.serial_number,
             mac_addresses=payload.mac_addresses,
         )
 
         candidates = self.devices.list_candidates_for_identity(
-            machine_id=identity.machine_id,
             serial_number=identity.serial_number,
             mac_addresses=identity.mac_addresses,
         )
@@ -126,7 +124,9 @@ class RegistrationService:
         return token
 
     def _resolve_name(self, payload: AgentRegisterRequest, identity: DeviceIdentity) -> str:
-        candidate = payload.name or payload.hostname or identity.machine_id or identity.serial_number
+        candidate = payload.name or payload.hostname or identity.serial_number
+        if not candidate and identity.mac_addresses:
+            candidate = identity.mac_addresses[0]
         if candidate:
             return candidate.strip()[:255]
         return "unnamed-device"
@@ -137,7 +137,6 @@ class RegistrationService:
         payload: AgentRegisterRequest,
         identity: DeviceIdentity,
     ) -> None:
-        device.machine_id = identity.machine_id
         device.serial_number = identity.serial_number
         device.mac_addresses = identity.mac_addresses
         device.hostname = payload.hostname

@@ -30,7 +30,7 @@ def test_device_search_and_pagination(client: TestClient, db_session: Session) -
             org.id,
             headers,
             name=f"edge-{i}",
-            machine_id=f"m-{i}",
+            mac_addresses=[f"aa:bb:cc:dd:ee:{i:02x}"],
             architecture="arm64" if i == 0 else "x86_64",
         )
 
@@ -60,7 +60,7 @@ def test_device_status_filter(client: TestClient, db_session: Session) -> None:
     owner = create_user(db_session, email="owner@example.com")
     org, _ = create_org_with_owner(db_session, owner)
     headers = auth_header(client, "owner@example.com")
-    reg = _register(client, org.id, headers, name="edge-online", machine_id="m-1")
+    reg = _register(client, org.id, headers, name="edge-online", mac_addresses=["aa:bb:cc:dd:ee:01"])
     # Heartbeat to mark online.
     client.post(
         "/api/v1/agent/heartbeat",
@@ -78,8 +78,8 @@ def test_device_sort(client: TestClient, db_session: Session) -> None:
     owner = create_user(db_session, email="owner@example.com")
     org, _ = create_org_with_owner(db_session, owner)
     headers = auth_header(client, "owner@example.com")
-    _register(client, org.id, headers, name="bravo", machine_id="m-b")
-    _register(client, org.id, headers, name="alpha", machine_id="m-a")
+    _register(client, org.id, headers, name="bravo", mac_addresses=["aa:bb:cc:dd:ee:0b"])
+    _register(client, org.id, headers, name="alpha", mac_addresses=["aa:bb:cc:dd:ee:0a"])
 
     asc = client.get(
         f"/api/v1/organizations/{org.id}/devices?sort=name&order=asc", headers=headers
@@ -100,7 +100,7 @@ def test_update_device_assignments(client: TestClient, db_session: Session) -> N
         headers=headers,
         json={"name": "Gateway"},
     ).json()
-    reg = _register(client, org.id, headers, name="edge-01", machine_id="m-1")
+    reg = _register(client, org.id, headers, name="edge-01", mac_addresses=["aa:bb:cc:dd:ee:01"])
 
     updated = client.patch(
         f"/api/v1/organizations/{org.id}/devices/{reg['device_id']}",
@@ -124,7 +124,7 @@ def test_rotate_and_revoke_credential(client: TestClient, db_session: Session) -
     owner = create_user(db_session, email="owner@example.com")
     org, _ = create_org_with_owner(db_session, owner)
     headers = auth_header(client, "owner@example.com")
-    reg = _register(client, org.id, headers, name="edge-01", machine_id="m-1")
+    reg = _register(client, org.id, headers, name="edge-01", mac_addresses=["aa:bb:cc:dd:ee:01"])
 
     rotated = client.post(
         f"/api/v1/organizations/{org.id}/devices/{reg['device_id']}/rotate-credential",
@@ -172,7 +172,7 @@ def test_delete_device(client: TestClient, db_session: Session) -> None:
     owner = create_user(db_session, email="owner@example.com")
     org, _ = create_org_with_owner(db_session, owner)
     headers = auth_header(client, "owner@example.com")
-    reg = _register(client, org.id, headers, name="edge-01", machine_id="m-1")
+    reg = _register(client, org.id, headers, name="edge-01", mac_addresses=["aa:bb:cc:dd:ee:01"])
     device_id = reg["device_id"]
 
     deleted = client.delete(
@@ -207,7 +207,7 @@ def test_member_cannot_delete_device(client: TestClient, db_session: Session) ->
     add_member(db_session, org, member, OrganizationRole.MEMBER)
     owner_headers = auth_header(client, "owner@example.com")
     member_headers = auth_header(client, "member@example.com")
-    reg = _register(client, org.id, owner_headers, name="edge-01", machine_id="m-1")
+    reg = _register(client, org.id, owner_headers, name="edge-01", mac_addresses=["aa:bb:cc:dd:ee:01"])
 
     denied = client.delete(
         f"/api/v1/organizations/{org.id}/devices/{reg['device_id']}",

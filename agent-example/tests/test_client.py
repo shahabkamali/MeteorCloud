@@ -38,7 +38,7 @@ def test_register_success(monkeypatch) -> None:
         return FakeResponse(json.dumps(payload).encode("utf-8"))
 
     monkeypatch.setattr("urllib.request.urlopen", fake_urlopen)
-    result = client.register(token="reg_x", inventory={"machine_id": "m"}, name="n")
+    result = client.register(token="reg_x", inventory={"mac_addresses": ["aa:bb:cc:dd:ee:ff"]}, name="n")
     assert result["device_token"] == "dev_x"
 
 

@@ -78,7 +78,7 @@ def _register(client: TestClient, db_session: Session) -> tuple[dict, dict]:
     ).json()["token"]
     body = client.post(
         "/api/v1/agent/register",
-        json={"token": token, "name": "edge-01", "machine_id": "m-mqtt"},
+        json={"token": token, "name": "edge-01", "mac_addresses": ["aa:bb:cc:dd:ee:01"]},
     ).json()
     return headers, body
 

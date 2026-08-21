@@ -112,7 +112,7 @@ export function PendingEnrollmentRequests({
             <tr>
               <th className="px-4 py-3 font-semibold">Name</th>
               <th className="px-4 py-3 font-semibold">Hostname</th>
-              <th className="px-4 py-3 font-semibold">Machine ID</th>
+              <th className="px-4 py-3 font-semibold">MAC address</th>
               <th className="px-4 py-3 font-semibold">Architecture</th>
               <th className="px-4 py-3 font-semibold">Requested</th>
               <th className="px-4 py-3 font-semibold">Status</th>
@@ -126,7 +126,9 @@ export function PendingEnrollmentRequests({
                   {entry.assigned_name ?? entry.requested_name ?? "—"}
                 </td>
                 <td className="px-4 py-3 text-muted-foreground">{entry.hostname ?? "—"}</td>
-                <td className="px-4 py-3 font-mono text-xs">{entry.machine_id ?? "—"}</td>
+                <td className="px-4 py-3 font-mono text-xs">
+                  {entry.mac_addresses.length ? entry.mac_addresses.join(", ") : "—"}
+                </td>
                 <td className="px-4 py-3 text-muted-foreground">{entry.architecture ?? "—"}</td>
                 <td className="px-4 py-3 text-muted-foreground">
                   {formatDateTime(entry.created_at)}

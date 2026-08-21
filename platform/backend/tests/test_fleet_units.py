@@ -67,15 +67,15 @@ def test_normalize_macs_dedupes_and_orders() -> None:
     assert result == ["aa:bb:cc:dd:ee:ff", "11:22:33:44:55:66"]
 
 
-def test_identity_matches_by_machine_id() -> None:
-    identity = DeviceIdentity(machine_id="abc", serial_number=None, mac_addresses=[])
-    device = Device(machine_id="abc")
+def test_identity_matches_by_serial_number() -> None:
+    identity = DeviceIdentity(serial_number="abc", mac_addresses=[])
+    device = Device(serial_number="abc")
     assert identity.matches(device)
 
 
 def test_identity_matches_by_mac_overlap() -> None:
     identity = DeviceIdentity(
-        machine_id=None, serial_number=None, mac_addresses=["aa:bb:cc:dd:ee:ff"]
+        serial_number=None, mac_addresses=["aa:bb:cc:dd:ee:ff"]
     )
     device = Device(mac_addresses=["11:22:33:44:55:66", "aa:bb:cc:dd:ee:ff"])
     assert identity.matches(device)
@@ -86,10 +86,10 @@ def test_match_existing_device_cross_organization(monkeypatch) -> None:
 
     org_a = uuid.uuid4()
     org_b = uuid.uuid4()
-    other = Device(machine_id="m1")
+    other = Device(mac_addresses=["aa:bb:cc:dd:ee:01"])
     other.organization_id = org_b
     other.id = uuid.uuid4()
-    identity = DeviceIdentity(machine_id="m1", serial_number=None, mac_addresses=[])
+    identity = DeviceIdentity(serial_number=None, mac_addresses=["aa:bb:cc:dd:ee:01"])
     result = match_existing_device(identity, organization_id=org_a, candidates=[other])
     assert result.cross_organization is True
     assert result.device is None
@@ -99,13 +99,13 @@ def test_match_existing_device_ambiguous() -> None:
     import uuid
 
     org = uuid.uuid4()
-    d1 = Device(machine_id="m1")
+    d1 = Device(mac_addresses=["aa:bb:cc:dd:ee:01"])
     d1.organization_id = org
     d1.id = uuid.uuid4()
     d2 = Device(serial_number="s1")
     d2.organization_id = org
     d2.id = uuid.uuid4()
-    identity = DeviceIdentity(machine_id="m1", serial_number="s1", mac_addresses=[])
+    identity = DeviceIdentity(serial_number="s1", mac_addresses=["aa:bb:cc:dd:ee:01"])
     result = match_existing_device(identity, organization_id=org, candidates=[d1, d2])
     assert result.ambiguous is True
 

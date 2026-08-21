@@ -72,7 +72,6 @@ const device = {
   device_group_id: null,
   is_enabled: true,
   status: "online" as const,
-  machine_id: "machine-123",
   serial_number: null,
   mac_addresses: ["aa:bb:cc:dd:ee:ff"],
   hostname: "edge-01",
@@ -235,7 +234,6 @@ describe("Add device flow", () => {
         assigned_name: null,
         device_type_id: null,
         device_group_id: null,
-        machine_id: "machine-xyz",
         serial_number: null,
         mac_addresses: [],
         hostname: "edge-01",
@@ -379,7 +377,7 @@ describe("Device detail", () => {
 
     renderApp(["/organizations/org-1/devices/device-1"]);
     expect(await screen.findByText("MQTT Connection")).toBeInTheDocument();
-    expect(screen.getAllByText("machine-123").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("aa:bb:cc:dd:ee:ff").length).toBeGreaterThan(0);
     expect(screen.getAllByText("devices/device-1/events").length).toBeGreaterThan(0);
     expect(screen.getByText(/meteorcli mqtt-test/)).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: /test connection/i }));
@@ -463,7 +461,6 @@ describe("API keys", () => {
       assigned_name: null,
       device_type_id: null,
       device_group_id: null,
-      machine_id: "machine-xyz",
       serial_number: null,
       mac_addresses: [],
       hostname: "edge-warehouse",
@@ -534,8 +531,11 @@ describe("MQTT test", () => {
     expect(screen.queryByLabelText(/^device$/i)).not.toBeInTheDocument();
     await user.type(screen.getByLabelText(/^topic$/i), "lab/temp");
     await user.click(screen.getByRole("button", { name: /^listen$/i }));
+    expect(await screen.findByText("Received")).toBeInTheDocument();
     expect(await screen.findByText("23.5")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: /^stop$/i }));
     expect(screen.getByRole("button", { name: /^listen$/i })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /^publish$/i }));
+    expect(await screen.findByText("Sent")).toBeInTheDocument();
   });
 });

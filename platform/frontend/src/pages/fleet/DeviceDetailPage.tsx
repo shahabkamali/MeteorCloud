@@ -102,7 +102,7 @@ export function DeviceDetailPage() {
   const statusTopic = `devices/${device.id}/status`;
   const meteorcliExamples = [
     "meteorcli mqtt-test",
-    `meteorcli mqtt-test ${eventsTopic} '{"machine_id":"${device.machine_id ?? ""}","message":"hello"}'`,
+    `meteorcli mqtt-test ${eventsTopic} '{"mac_address":"${device.mac_addresses[0] ?? ""}","message":"hello"}'`,
     "meteorcli mqtt-listen",
     `meteorcli mqtt-listen ${eventsTopic}`,
     `meteorcli mqtt-listen commands`,
@@ -193,7 +193,7 @@ export function DeviceDetailPage() {
             <h1 className="text-3xl font-semibold tracking-tight">{device.name}</h1>
             <StatusBadge status={device.status} />
           </div>
-          <p className="mt-2 text-muted-foreground">{device.hostname ?? device.machine_id}</p>
+          <p className="mt-2 text-muted-foreground">{device.hostname ?? device.mac_addresses[0] ?? "—"}</p>
         </div>
         <Button variant="secondary" asChild>
           <Link to={`/organizations/${organizationId}/devices`}>Back to devices</Link>
@@ -217,7 +217,10 @@ export function DeviceDetailPage() {
         </div>
         <div className="grid gap-4 sm:grid-cols-2">
           <Detail label="Device ID" value={device.id} />
-          <Detail label="Machine ID" value={device.machine_id} />
+          <Detail
+            label="MAC address"
+            value={device.mac_addresses.length ? device.mac_addresses.join(", ") : null}
+          />
           <Detail label="MQTT username" value={`device_${device.id}`} />
           <Detail label="Events topic" value={eventsTopic} />
           <Detail label="Commands topic" value={commandsTopic} />
@@ -247,7 +250,6 @@ export function DeviceDetailPage() {
       </div>
 
       <div className="grid gap-4 rounded-lg border border-border bg-white/80 p-6 shadow-sm sm:grid-cols-2">
-        <Detail label="Machine ID" value={device.machine_id} />
         <Detail label="Serial number" value={device.serial_number} />
         <Detail label="Operating system" value={[device.os_name, device.os_version].filter(Boolean).join(" ")} />
         <Detail label="Kernel" value={device.kernel_version} />
@@ -255,7 +257,7 @@ export function DeviceDetailPage() {
         <Detail label="CPU" value={device.cpu_model} />
         <Detail label="CPU cores" value={device.cpu_cores ? String(device.cpu_cores) : null} />
         <Detail label="Memory (MB)" value={device.memory_mb ? String(device.memory_mb) : null} />
-        <Detail label="MAC addresses" value={device.mac_addresses.join(", ")} />
+        <Detail label="MAC address" value={device.mac_addresses.join(", ")} />
         <Detail
           label="Last seen"
           value={device.last_seen_at ? formatDateTime(device.last_seen_at) : "Never"}

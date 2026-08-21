@@ -60,11 +60,12 @@ class PlatformApi:
             token=self.token,
             body={"name": name, "max_uses": 1},
         )
-        machine_id = f"m-{uuid.uuid4().hex}"
+        hex_id = uuid.uuid4().hex[:12]
+        mac_address = ":".join(hex_id[i : i + 2] for i in range(0, 12, 2))
         body = request_json(
             "POST",
             self._url("/api/v1/agent/register"),
-            body={"token": created["token"], "name": name, "machine_id": machine_id},
+            body={"token": created["token"], "name": name, "mac_addresses": [mac_address]},
         )
         mqtt = body["mqtt"]
         return RegisteredDevice(

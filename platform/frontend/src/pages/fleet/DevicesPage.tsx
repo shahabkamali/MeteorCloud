@@ -352,7 +352,7 @@ export function DevicesPage() {
       <div className="grid gap-3 rounded-lg border border-border bg-white/80 p-4 shadow-sm md:grid-cols-4">
         <Input
           aria-label="Search devices"
-          placeholder="Search name, hostname, machine ID…"
+          placeholder="Search name, hostname, serial, MAC…"
           value={search}
           onChange={(event) => {
             setPage(1);

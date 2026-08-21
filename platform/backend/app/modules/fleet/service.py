@@ -851,7 +851,6 @@ class FleetService:
             device_group_id=device.device_group_id,
             is_enabled=device.is_enabled,
             status=status,
-            machine_id=device.machine_id,
             serial_number=device.serial_number,
             mac_addresses=device.mac_addresses,
             hostname=device.hostname,

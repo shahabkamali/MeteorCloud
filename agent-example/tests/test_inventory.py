@@ -8,7 +8,6 @@ from edge_agent import inventory
 def test_collect_inventory_has_all_keys() -> None:
     data = inventory.collect_inventory()
     expected = {
-        "machine_id",
         "serial_number",
         "mac_addresses",
         "hostname",
@@ -49,6 +48,5 @@ def test_collect_inventory_tolerates_missing_system(monkeypatch) -> None:
     monkeypatch.setattr(inventory, "_read_text", lambda path: None)
     monkeypatch.setattr(inventory, "read_mac_addresses", lambda: [])
     data = inventory.collect_inventory()
-    assert data["machine_id"] is None
     assert data["os_name"] is None
     assert data["mac_addresses"] == []

@@ -66,7 +66,6 @@ class EnrollmentService:
         payload: AgentEnrollRequest,
     ) -> AgentEnrollResponse:
         identity = DeviceIdentity.from_inventory(
-            machine_id=payload.machine_id,
             serial_number=payload.serial_number,
             mac_addresses=payload.mac_addresses,
         )
@@ -82,7 +81,6 @@ class EnrollmentService:
             claim_secret_hash=claim.token_hash,
             claim_secret_prefix=claim.display_prefix,
             requested_name=(payload.name.strip()[:255] if payload.name else None),
-            machine_id=identity.machine_id,
             serial_number=identity.serial_number,
             mac_addresses=identity.mac_addresses,
             hostname=payload.hostname,
@@ -200,12 +198,10 @@ class EnrollmentService:
 
     def _issue_device(self, request: DeviceEnrollmentRequest, now: datetime) -> tuple[Device, str]:
         identity = DeviceIdentity.from_inventory(
-            machine_id=request.machine_id,
             serial_number=request.serial_number,
             mac_addresses=request.mac_addresses,
         )
         candidates = self.devices.list_candidates_for_identity(
-            machine_id=identity.machine_id,
             serial_number=identity.serial_number,
             mac_addresses=identity.mac_addresses,
         )
@@ -237,15 +233,14 @@ class EnrollmentService:
             request.assigned_name
             or request.requested_name
             or request.hostname
-            or identity.machine_id
             or identity.serial_number
+            or (identity.mac_addresses[0] if identity.mac_addresses else None)
         )
         if candidate:
             return candidate.strip()[:255]
         return "unnamed-device"
 
     def _apply_inventory(self, device: Device, request: DeviceEnrollmentRequest, identity: DeviceIdentity) -> None:
-        device.machine_id = identity.machine_id
         device.serial_number = identity.serial_number
         device.mac_addresses = identity.mac_addresses
         device.hostname = request.hostname

@@ -48,7 +48,6 @@ export type Device = {
   device_group_id: string | null;
   is_enabled: boolean;
   status: ConnectivityStatus;
-  machine_id: string | null;
   serial_number: string | null;
   mac_addresses: string[];
   hostname: string | null;
@@ -125,7 +124,6 @@ export type DeviceEnrollmentRequest = {
   assigned_name: string | null;
   device_type_id: string | null;
   device_group_id: string | null;
-  machine_id: string | null;
   serial_number: string | null;
   mac_addresses: string[];
   hostname: string | null;

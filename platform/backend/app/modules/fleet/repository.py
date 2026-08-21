@@ -12,7 +12,7 @@ import uuid
 from collections.abc import Sequence
 from datetime import datetime
 
-from sqlalchemy import Select, asc, desc, func, or_, select
+from sqlalchemy import Select, String, asc, cast, desc, func, or_, select
 from sqlalchemy.orm import Session
 
 from app.modules.fleet.models import (
@@ -183,7 +183,6 @@ class DeviceRepository:
     def list_candidates_for_identity(
         self,
         *,
-        machine_id: str | None,
         serial_number: str | None,
         mac_addresses: Sequence[str],
     ) -> list[Device]:
@@ -193,8 +192,6 @@ class DeviceRepository:
         registrations that collide with another tenant.
         """
         conditions = []
-        if machine_id:
-            conditions.append(Device.machine_id == machine_id)
         if serial_number:
             conditions.append(Device.serial_number == serial_number)
         for mac in mac_addresses:
@@ -237,8 +234,8 @@ class DeviceRepository:
                 or_(
                     func.lower(Device.name).like(pattern),
                     func.lower(func.coalesce(Device.hostname, "")).like(pattern),
-                    func.lower(func.coalesce(Device.machine_id, "")).like(pattern),
                     func.lower(func.coalesce(Device.serial_number, "")).like(pattern),
+                    func.lower(cast(Device.mac_addresses, String)).like(pattern),
                 )
             )
         if device_type_id is not None:

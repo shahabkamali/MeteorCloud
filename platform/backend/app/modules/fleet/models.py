@@ -144,7 +144,6 @@ class Device(Base, UUIDPrimaryKeyMixin, TimestampMixin):
             name="uq_devices_credential_hash",
         ),
         Index("ix_devices_organization_id", "organization_id"),
-        Index("ix_devices_org_machine_id", "organization_id", "machine_id"),
         Index("ix_devices_org_serial_number", "organization_id", "serial_number"),
         Index("ix_devices_org_last_seen_at", "organization_id", "last_seen_at"),
         Index("ix_devices_org_device_type_id", "organization_id", "device_type_id"),
@@ -177,7 +176,6 @@ class Device(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     )
 
     # Hardware / OS identity used for duplicate detection.
-    machine_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     serial_number: Mapped[str | None] = mapped_column(String(255), nullable=True)
     mac_addresses: Mapped[list[str]] = mapped_column(
         JSONB,
@@ -335,7 +333,6 @@ class DeviceEnrollmentRequest(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     )
 
     # Captured inventory (mirrors Device; all optional).
-    machine_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     serial_number: Mapped[str | None] = mapped_column(String(255), nullable=True)
     mac_addresses: Mapped[list[str]] = mapped_column(
         JSONB,

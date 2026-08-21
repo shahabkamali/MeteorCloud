@@ -187,7 +187,6 @@ class DeviceResponse(BaseModel):
     device_group_id: uuid.UUID | None
     is_enabled: bool
     status: ConnectivityStatus
-    machine_id: str | None
     serial_number: str | None
     mac_addresses: list[str]
     hostname: str | None
@@ -258,7 +257,6 @@ class DeviceCredentialResponse(BaseModel):
 class AgentRegisterRequest(BaseModel):
     token: str = Field(min_length=1)
     name: str | None = Field(default=None, max_length=255)
-    machine_id: str | None = Field(default=None, max_length=255)
     serial_number: str | None = Field(default=None, max_length=255)
     mac_addresses: list[str] = Field(default_factory=list)
     hostname: str | None = Field(default=None, max_length=255)
@@ -352,7 +350,6 @@ class DeviceEnrollmentRequestResponse(BaseModel):
     assigned_name: str | None
     device_type_id: uuid.UUID | None
     device_group_id: uuid.UUID | None
-    machine_id: str | None
     serial_number: str | None
     mac_addresses: list[str]
     hostname: str | None
@@ -398,7 +395,6 @@ class EnrollmentRejectRequest(BaseModel):
 # --------------------------------------------------------------------------- #
 class AgentEnrollRequest(BaseModel):
     name: str | None = Field(default=None, max_length=255)
-    machine_id: str | None = Field(default=None, max_length=255)
     serial_number: str | None = Field(default=None, max_length=255)
     mac_addresses: list[str] = Field(default_factory=list)
     hostname: str | None = Field(default=None, max_length=255)

@@ -15,7 +15,6 @@ Request body (all inventory fields optional except `token`):
 {
   "token": "reg_...",
   "name": "edge-01",
-  "machine_id": "…",
   "serial_number": "…",
   "mac_addresses": ["aa:bb:cc:dd:ee:ff"],
   "hostname": "edge-01",
@@ -61,7 +60,7 @@ count incremented — committed once, or rolled back entirely on any failure.
 
 ## Duplicate detection and re-registration
 
-Device identity is matched using machine ID, hardware serial, and overlapping
+Device identity is matched using hardware serial and overlapping
 normalized MAC addresses:
 
 - **Same organization, single match** → the existing device is updated

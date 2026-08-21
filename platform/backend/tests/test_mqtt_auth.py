@@ -25,7 +25,7 @@ def _register(client: TestClient, db_session: Session) -> dict:
     ).json()["token"]
     response = client.post(
         "/api/v1/agent/register",
-        json={"token": token, "name": "edge-01", "machine_id": "m-1"},
+        json={"token": token, "name": "edge-01", "mac_addresses": ["aa:bb:cc:dd:ee:01"]},
     )
     assert response.status_code == 201, response.text
     body = response.json()

@@ -44,7 +44,7 @@ stores MQTT credentials in `mqtt.json` (`0600`) and `mqtt-ca.crt`. Start
 `meteorcli run` so the agent connects, publishes `online`, and answers ping.
 
 On the device detail page: **Test Connection** (ping), plus that device's ID,
-machine ID, topics, and meteorcli examples. Open **MQTT test** in the sidebar
+MAC address, topics, and meteorcli examples. Open **MQTT test** in the sidebar
 for a free-form topic/payload console (plain text, any topic).
 
 To watch a device event from the Pi:

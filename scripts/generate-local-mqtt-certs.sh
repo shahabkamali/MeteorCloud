@@ -8,6 +8,11 @@ OUT="$(cd "$OUT" && pwd)"
 
 if [[ -z "${MQTT_PUBLIC_HOST:-}" && -f "$ROOT/.env" ]]; then
   MQTT_PUBLIC_HOST="$(awk -F= '/^MQTT_PUBLIC_HOST=/{print substr($0, index($0,"=")+1); exit}' "$ROOT/.env")"
+  MQTT_PUBLIC_HOST="${MQTT_PUBLIC_HOST%$'\r'}"
+  case "$MQTT_PUBLIC_HOST" in
+    \"*\") MQTT_PUBLIC_HOST="${MQTT_PUBLIC_HOST:1:-1}" ;;
+    \'*\') MQTT_PUBLIC_HOST="${MQTT_PUBLIC_HOST:1:-1}" ;;
+  esac
 fi
 
 if [[ ! -f "$OUT/ca.key" || ! -f "$OUT/ca.crt" ]]; then

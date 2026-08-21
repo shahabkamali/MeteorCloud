@@ -6,13 +6,14 @@ import json
 import uuid
 from collections import defaultdict, deque
 from dataclasses import dataclass
-from queue import Queue
+from queue import Full, Queue
 from threading import Lock
 from typing import Any
 
 from app.modules.mqtt.topics import mqtt_topic_matches
 
 _MAX_RECENT = 50
+_MAX_QUEUE = 50
 
 
 @dataclass(frozen=True)
@@ -37,9 +38,10 @@ class MqttTestEvent:
 
 
 class MqttEventHub:
-    def __init__(self, *, max_recent: int = _MAX_RECENT) -> None:
+    def __init__(self, *, max_recent: int = _MAX_RECENT, max_queue: int = _MAX_QUEUE) -> None:
         self._lock = Lock()
         self._max_recent = max_recent
+        self._max_queue = max_queue
         self._recent: dict[tuple[uuid.UUID | None, str], deque[MqttTestEvent]] = defaultdict(
             lambda: deque(maxlen=self._max_recent)
         )
@@ -53,26 +55,26 @@ class MqttEventHub:
             for (org_id, topic_filter), queues in self._subs.items():
                 if not mqtt_topic_matches(topic_filter, event.topic):
                     continue
-                if event.organization_id is not None and event.organization_id != org_id:
+                if event.organization_id != org_id:
                     continue
                 deliveries.extend(queues)
         for queue in deliveries:
-            queue.put(event)
+            self._offer(queue, event)
 
     def subscribe(self, organization_id: uuid.UUID, topic_filter: str) -> Queue[MqttTestEvent]:
         sub_key = (organization_id, topic_filter)
-        queue: Queue[MqttTestEvent] = Queue()
+        queue: Queue[MqttTestEvent] = Queue(maxsize=self._max_queue)
         with self._lock:
             self._subs[sub_key].add(queue)
             replay = [
                 event
                 for (org_id, topic), events in self._recent.items()
                 if mqtt_topic_matches(topic_filter, topic)
-                and (org_id is None or org_id == organization_id)
+                and org_id == organization_id
                 for event in events
             ]
         for event in replay:
-            queue.put(event)
+            self._offer(queue, event)
         return queue
 
     def unsubscribe(
@@ -89,6 +91,13 @@ class MqttEventHub:
             listeners.discard(queue)
             if not listeners:
                 self._subs.pop(sub_key, None)
+
+    def _offer(self, queue: Queue[MqttTestEvent], event: MqttTestEvent) -> None:
+        """Enqueue an event; drop it if the subscriber is not keeping up."""
+        try:
+            queue.put_nowait(event)
+        except Full:
+            pass
 
 
 _hub = MqttEventHub()

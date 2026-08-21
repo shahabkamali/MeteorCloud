@@ -85,8 +85,16 @@ class PlatformMqttClient(MqttPublisher):
         with self._lock:
             self._watch_counts[topic] = self._watch_counts.get(topic, 0) + 1
             first = self._watch_counts[topic] == 1
-        if first and topic not in _SUBSCRIBE_TOPICS and client is not None:
-            client.subscribe(topic, qos=1)
+        if not first or topic in _SUBSCRIBE_TOPICS or client is None:
+            return
+        connected = client.is_connected()
+        if connected:
+            with self._lock:
+                self._pending_subs += 1
+        result, _mid = client.subscribe(topic, qos=1)
+        if connected and result != mqtt.MQTT_ERR_SUCCESS:
+            logger.warning("MQTT platform subscribe request failed for %s: %s", topic, result)
+            self._account_subscribe()
 
     def unwatch_topic(self, topic: str) -> None:
         client = self._client
@@ -137,7 +145,9 @@ class PlatformMqttClient(MqttPublisher):
         codes = reason_codes if isinstance(reason_codes, list) else [reason_codes]
         if any(bool(getattr(code, "is_failure", False)) for code in codes):
             logger.warning("MQTT platform subscribe failed: %s", codes)
-            return
+        self._account_subscribe()
+
+    def _account_subscribe(self) -> None:
         with self._lock:
             self._pending_subs = max(0, self._pending_subs - 1)
             ready = self._pending_subs == 0

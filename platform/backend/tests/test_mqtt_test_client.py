@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import uuid
+from queue import Empty
 
 from sqlalchemy.orm import Session
 
@@ -63,6 +64,49 @@ def test_hub_only_forwards_matching_topic() -> None:
     assert event.payload == "mine"
     assert queue.empty()
     hub.unsubscribe(org_a, f"devices/{device_a}/events", queue)
+
+
+def test_hub_does_not_deliver_unscoped_events_to_org_listeners() -> None:
+    hub = MqttEventHub()
+    org_id = uuid.uuid4()
+    topic = "lab/temp"
+    queue = hub.subscribe(org_id, topic)
+    hub.publish(
+        MqttTestEvent(
+            organization_id=None,
+            topic=topic,
+            payload="unscoped",
+            received_at="t0",
+        )
+    )
+    hub.publish(
+        MqttTestEvent(
+            organization_id=org_id,
+            topic=topic,
+            payload="scoped",
+            received_at="t1",
+        )
+    )
+    assert queue.get(timeout=1).payload == "scoped"
+    assert queue.empty()
+    hub.unsubscribe(org_id, topic, queue)
+
+
+def test_hub_does_not_replay_unscoped_events() -> None:
+    hub = MqttEventHub()
+    org_id = uuid.uuid4()
+    topic = "lab/temp"
+    hub.publish(
+        MqttTestEvent(
+            organization_id=None,
+            topic=topic,
+            payload="unscoped",
+            received_at="t0",
+        )
+    )
+    queue = hub.subscribe(org_id, topic)
+    assert queue.empty()
+    hub.unsubscribe(org_id, topic, queue)
 
 
 def test_mqtt_publish_requires_membership_and_device(db_session: Session) -> None:
@@ -162,4 +206,52 @@ def test_hub_replays_recent_events_on_subscribe() -> None:
     )
     queue = hub.subscribe(org_id, topic)
     assert queue.get(timeout=1).payload == "from-device"
+    hub.unsubscribe(org_id, topic, queue)
+
+
+def test_hub_drops_events_when_subscriber_queue_is_full() -> None:
+    hub = MqttEventHub(max_recent=8, max_queue=2)
+    org_id = uuid.uuid4()
+    topic = "lab/temp"
+    queue = hub.subscribe(org_id, topic)
+    for i in range(5):
+        hub.publish(
+            MqttTestEvent(
+                organization_id=org_id,
+                topic=topic,
+                payload=str(i),
+                received_at=str(i),
+            )
+        )
+    got: list[str] = []
+    while True:
+        try:
+            got.append(queue.get_nowait().payload)
+        except Empty:
+            break
+    assert got == ["0", "1"]
+    hub.unsubscribe(org_id, topic, queue)
+
+
+def test_hub_replay_drops_when_queue_is_full() -> None:
+    hub = MqttEventHub(max_recent=5, max_queue=2)
+    org_id = uuid.uuid4()
+    topic = "lab/temp"
+    for i in range(5):
+        hub.publish(
+            MqttTestEvent(
+                organization_id=org_id,
+                topic=topic,
+                payload=str(i),
+                received_at=str(i),
+            )
+        )
+    queue = hub.subscribe(org_id, topic)
+    got: list[str] = []
+    while True:
+        try:
+            got.append(queue.get_nowait().payload)
+        except Empty:
+            break
+    assert got == ["0", "1"]
     hub.unsubscribe(org_id, topic, queue)

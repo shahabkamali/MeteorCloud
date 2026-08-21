@@ -41,6 +41,9 @@ export function MqttConsole({
   const sentRef = useRef<ConsoleMessage[]>([]);
 
   useEffect(() => {
+    stopListening();
+    setMessages([]);
+    sentRef.current = [];
     setTopic(defaultTopic);
   }, [defaultTopic]);
 

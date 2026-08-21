@@ -171,7 +171,7 @@ export function DeviceDetailPage() {
       if (result.status === "completed") {
         setPingResult(
           `Connection test successful${
-            result.round_trip_ms != null ? ` Round trip: ${result.round_trip_ms} ms` : ""
+            result.round_trip_ms != null ? `. Round trip: ${result.round_trip_ms} ms` : ""
           }`,
         );
         await invalidate();

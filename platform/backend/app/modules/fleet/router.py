@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import uuid
+from queue import Empty
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query
+from fastapi.responses import StreamingResponse
 
 from app.modules.fleet.dependencies import FleetSvc
 from app.modules.fleet.schemas import (
@@ -31,7 +33,8 @@ from app.modules.fleet.schemas import (
 )
 from app.modules.identity.dependencies import CurrentUser
 from app.modules.mqtt.broker import get_mqtt_publisher
-from app.modules.mqtt.schemas import DevicePingResponse
+from app.modules.mqtt.hub import get_mqtt_event_hub
+from app.modules.mqtt.schemas import DevicePingResponse, MqttTestPublishRequest, MqttTestPublishResponse
 from app.modules.mqtt.service import MqttPublisher
 
 router = APIRouter(prefix="/api/v1/organizations/{organization_id}", tags=["fleet"])
@@ -418,5 +421,59 @@ def ping_device(
         actor=current_user,
         organization_id=organization_id,
         device_id=device_id,
+        publisher=publisher,
+    )
+
+
+@router.get("/mqtt/events")
+def stream_mqtt_events(
+    organization_id: uuid.UUID,
+    current_user: CurrentUser,
+    service: FleetSvc,
+    device_id: Annotated[uuid.UUID, Query()],
+) -> StreamingResponse:
+    service.require_mqtt_listener(
+        actor=current_user,
+        organization_id=organization_id,
+        device_id=device_id,
+    )
+    hub = get_mqtt_event_hub()
+    queue = hub.subscribe(organization_id, device_id)
+
+    def _stream():
+        try:
+            while True:
+                try:
+                    event = queue.get(timeout=15)
+                    yield f"data: {event.sse_data()}\n\n"
+                except Empty:
+                    yield ": keepalive\n\n"
+        finally:
+            hub.unsubscribe(organization_id, device_id, queue)
+
+    return StreamingResponse(
+        _stream(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
+
+
+@router.post("/mqtt/publish", response_model=MqttTestPublishResponse)
+def publish_mqtt_test_event(
+    organization_id: uuid.UUID,
+    payload: MqttTestPublishRequest,
+    current_user: CurrentUser,
+    service: FleetSvc,
+    publisher: Annotated[MqttPublisher, Depends(get_mqtt_publisher)],
+) -> MqttTestPublishResponse:
+    return service.publish_mqtt_test_event(
+        actor=current_user,
+        organization_id=organization_id,
+        device_id=payload.device_id,
+        payload=payload.payload,
         publisher=publisher,
     )

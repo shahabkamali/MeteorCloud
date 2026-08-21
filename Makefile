@@ -28,6 +28,7 @@ dev: ## Start the development stack
 
 mqtt-certs: ## Generate local MQTT CA and broker certificates
 	./scripts/generate-local-mqtt-certs.sh
+	-$(COMPOSE) restart emqx
 
 test-mqtt: ## Start local Compose MQTT stack and run live MQTT tests
 	chmod +x scripts/test-mqtt.sh

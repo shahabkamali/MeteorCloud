@@ -5,13 +5,16 @@ from __future__ import annotations
 import json
 import logging
 import os
+import socket
 import ssl
 import time
+import uuid
 from collections.abc import Callable
+from threading import Event
 
 import paho.mqtt.client as mqtt
 
-from edge_agent.mqtt_config import MqttConfig
+from edge_agent.mqtt_config import MqttConfig, resolve_mqtt_broker_host
 
 logger = logging.getLogger("edge_agent")
 
@@ -46,6 +49,37 @@ def tls_insecure_enabled() -> bool:
     return raw in {"1", "true", "yes", "on"}
 
 
+def verify_broker_tls(
+    host: str,
+    port: int,
+    ca_path: str | None,
+    *,
+    insecure: bool = False,
+    timeout: float = 8,
+) -> None:
+    """Fail fast on unreachable brokers or TLS hostname/CA mismatch."""
+    try:
+        raw = socket.create_connection((host, port), timeout=timeout)
+    except OSError as exc:
+        raise RuntimeError(f"MQTT broker {host}:{port} is not reachable: {exc}") from exc
+    try:
+        if insecure:
+            ctx = ssl._create_unverified_context()
+        elif ca_path:
+            ctx = ssl.create_default_context(cafile=ca_path)
+        else:
+            ctx = ssl.create_default_context()
+        ctx.wrap_socket(raw, server_hostname=host)
+    except ssl.SSLCertVerificationError as exc:
+        raise RuntimeError(
+            f"MQTT TLS verification failed for {host}:{port}: {exc}. "
+            "The broker certificate SAN must include that address "
+            "(set MQTT_PUBLIC_HOST, run make mqtt-certs, restart EMQX)."
+        ) from exc
+    finally:
+        raw.close()
+
+
 class DeviceMqttSession:
     def __init__(
         self,
@@ -53,13 +87,18 @@ class DeviceMqttSession:
         config: MqttConfig,
         *,
         tls_insecure: bool | None = None,
+        server_url: str | None = None,
         sleep: Callable[[float], None] = time.sleep,
     ) -> None:
         self.device_id = device_id
         self.config = config
         self.tls_insecure = tls_insecure_enabled() if tls_insecure is None else tls_insecure
+        self.server_url = server_url
         self._sleep = sleep
         self._client: mqtt.Client | None = None
+
+    def _broker_host(self) -> str:
+        return resolve_mqtt_broker_host(self.config.host, self.server_url)
 
     @property
     def commands_topic(self) -> str:
@@ -72,6 +111,10 @@ class DeviceMqttSession:
     @property
     def result_topic(self) -> str:
         return f"devices/{self.device_id}/commands/result"
+
+    @property
+    def events_topic(self) -> str:
+        return f"devices/{self.device_id}/events"
 
     def start(self) -> None:
         client = mqtt.Client(
@@ -92,8 +135,14 @@ class DeviceMqttSession:
         client.on_connect = self._on_connect
         client.on_message = self._on_message
         client.on_disconnect = self._on_disconnect
-        logger.info("Connecting to MQTT %s:%s with TLS", self.config.host, self.config.port)
-        client.connect_async(self.config.host, self.config.port, 60)
+        logger.info("Connecting to MQTT %s:%s with TLS", self._broker_host(), self.config.port)
+        verify_broker_tls(
+            self._broker_host(),
+            self.config.port,
+            self.config.ca_path,
+            insecure=self.tls_insecure,
+        )
+        client.connect_async(self._broker_host(), self.config.port, 60)
         client.loop_start()
         self._client = client
 
@@ -174,3 +223,65 @@ class DeviceMqttSession:
             qos=COMMANDS_QOS,
             retain=False,
         )
+
+
+def events_topic(device_id: str) -> str:
+    return f"devices/{device_id}/events"
+
+
+def publish_test_event(
+    device_id: str,
+    config: MqttConfig,
+    payload: dict,
+    *,
+    tls_insecure: bool | None = None,
+    server_url: str | None = None,
+    timeout: float = 12,
+) -> None:
+    """Connect over TLS, publish one events message, then disconnect."""
+    connected = Event()
+    connect_result: dict[str, object] = {}
+    insecure = tls_insecure_enabled() if tls_insecure is None else tls_insecure
+    host = resolve_mqtt_broker_host(config.host, server_url)
+    verify_broker_tls(host, config.port, config.ca_path, insecure=insecure)
+    client = mqtt.Client(
+        mqtt.CallbackAPIVersion.VERSION2,
+        client_id=f"device-{device_id}-mqtt-test-{uuid.uuid4().hex[:8]}",
+        protocol=mqtt.MQTTv311,
+    )
+    client.username_pw_set(config.username, config.password)
+    if config.tls:
+        if insecure:
+            client.tls_set(cert_reqs=ssl.CERT_NONE)
+            client.tls_insecure_set(True)
+        else:
+            client.tls_set(ca_certs=config.ca_path, cert_reqs=ssl.CERT_REQUIRED)
+            client.tls_insecure_set(False)
+
+    def _on_connect(
+        _client: mqtt.Client,
+        _userdata: object,
+        _connect_flags: object,
+        reason_code: object,
+        _properties: object = None,
+    ) -> None:
+        connect_result["reason_code"] = reason_code
+        connected.set()
+
+    client.on_connect = _on_connect
+    logger.info("Connecting to MQTT %s:%s with TLS", host, config.port)
+    client.connect_async(host, config.port, 30)
+    client.loop_start()
+    try:
+        if not connected.wait(timeout):
+            raise RuntimeError(f"MQTT connect timed out ({host}:{config.port})")
+        reason_code = connect_result.get("reason_code")
+        if getattr(reason_code, "is_failure", False):
+            raise RuntimeError(f"MQTT connect refused: {reason_code}")
+        info = client.publish(events_topic(device_id), json.dumps(payload), qos=COMMANDS_QOS, retain=False)
+        info.wait_for_publish(timeout=8)
+        if not info.is_published():
+            raise RuntimeError("MQTT publish did not complete")
+    finally:
+        client.disconnect()
+        client.loop_stop()

@@ -5,18 +5,21 @@ from __future__ import annotations
 import logging
 import ssl
 import uuid
+from datetime import UTC, datetime
 from threading import Event, Lock
 
 import paho.mqtt.client as mqtt
 
 from app.core.config import Settings
 from app.core.database import SessionLocal
+from app.modules.fleet.models import Device
 from app.modules.mqtt.acl import parse_device_topic
+from app.modules.mqtt.hub import MqttTestEvent, get_mqtt_event_hub
 from app.modules.mqtt.service import MqttPublisher, MqttService, NoopPublisher
 
 logger = logging.getLogger(__name__)
 
-_SUBSCRIBE_TOPICS = ("devices/+/status", "devices/+/commands/result")
+_SUBSCRIBE_TOPICS = ("devices/+/status", "devices/+/commands/result", "devices/+/events")
 
 
 class PlatformMqttClient(MqttPublisher):
@@ -141,12 +144,29 @@ class PlatformMqttClient(MqttPublisher):
                 service.apply_status_message(device_id=device_id, payload=payload)
             elif suffix == "commands/result":
                 service.apply_command_result(device_id=device_id, payload=payload)
+            elif suffix == "events":
+                _fanout_event(session, device_id=device_id, topic=message.topic, payload=payload)
             session.commit()
         except Exception:
             session.rollback()
             logger.exception("Failed to handle MQTT message on %s", message.topic)
         finally:
             session.close()
+
+
+def _fanout_event(session, *, device_id: uuid.UUID, topic: str, payload: str) -> None:
+    device = session.get(Device, device_id)
+    if device is None:
+        return
+    get_mqtt_event_hub().publish(
+        MqttTestEvent(
+            organization_id=device.organization_id,
+            device_id=device_id,
+            topic=topic,
+            payload=payload,
+            received_at=datetime.now(UTC).isoformat(),
+        )
+    )
 
 
 _publisher: MqttPublisher | None = None

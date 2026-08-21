@@ -6,18 +6,53 @@ OUT="${1:-$ROOT/certs}"
 mkdir -p "$OUT"
 OUT="$(cd "$OUT" && pwd)"
 
-openssl genrsa -out "$OUT/ca.key" 2048 >/dev/null 2>&1
-openssl req -x509 -new -nodes -key "$OUT/ca.key" -sha256 -days 3650 \
-  -out "$OUT/ca.crt" -subj "/CN=MeteorCloud Local MQTT CA" \
-  -addext "basicConstraints=critical,CA:true" \
-  -addext "keyUsage=critical,keyCertSign,cRLSign" >/dev/null 2>&1
+if [[ -z "${MQTT_PUBLIC_HOST:-}" && -f "$ROOT/.env" ]]; then
+  MQTT_PUBLIC_HOST="$(awk -F= '/^MQTT_PUBLIC_HOST=/{print substr($0, index($0,"=")+1); exit}' "$ROOT/.env")"
+fi
+
+if [[ ! -f "$OUT/ca.key" || ! -f "$OUT/ca.crt" ]]; then
+  openssl genrsa -out "$OUT/ca.key" 2048 >/dev/null 2>&1
+  openssl req -x509 -new -nodes -key "$OUT/ca.key" -sha256 -days 3650 \
+    -out "$OUT/ca.crt" -subj "/CN=MeteorCloud Local MQTT CA" \
+    -addext "basicConstraints=critical,CA:true" \
+    -addext "keyUsage=critical,keyCertSign,cRLSign" >/dev/null 2>&1
+fi
+
+SAN="DNS:localhost,DNS:emqx,IP:127.0.0.1"
+
+add_san() {
+  local item="$1"
+  case ",${SAN}," in
+    *",${item},"*) ;;
+    *) SAN="${SAN},${item}" ;;
+  esac
+}
+
+add_host_san() {
+  local host="$1"
+  [[ -z "$host" ]] && return 0
+  case "$host" in
+    localhost|127.0.0.1|emqx) return 0 ;;
+  esac
+  if [[ "$host" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+    add_san "IP:${host}"
+  else
+    add_san "DNS:${host}"
+  fi
+}
+
+add_host_san "${MQTT_PUBLIC_HOST:-}"
+
+# LAN devices verify TLS against this machine's address, not 127.0.0.1.
+LAN_IP="$(ip -4 route get 1.1.1.1 2>/dev/null | awk '{for (i = 1; i <= NF; i++) if ($i == "src") { print $(i + 1); exit }}')"
+add_host_san "$LAN_IP"
 
 openssl genrsa -out "$OUT/server.key" 2048 >/dev/null 2>&1
 openssl req -new -key "$OUT/server.key" -out "$OUT/server.csr" \
   -subj "/CN=localhost" >/dev/null 2>&1
 
-cat > "$OUT/server.ext" <<'EOF'
-subjectAltName=DNS:localhost,DNS:emqx,IP:127.0.0.1
+cat > "$OUT/server.ext" <<EOF
+subjectAltName=${SAN}
 keyUsage=digitalSignature,keyEncipherment
 extendedKeyUsage=serverAuth
 EOF
@@ -45,4 +80,4 @@ fi
 
 echo "Wrote MQTT development certificates to $OUT"
 echo "  CA:     $OUT/ca.crt"
-echo "  Server: $OUT/server.crt (SAN DNS:localhost, DNS:emqx, IP:127.0.0.1)"
+echo "  Server: $OUT/server.crt (SAN ${SAN})"

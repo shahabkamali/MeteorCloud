@@ -43,7 +43,21 @@ Then register a device (`meteorcli register` or request-token/claim). The agent
 stores MQTT credentials in `mqtt.json` (`0600`) and `mqtt-ca.crt`. Start
 `meteorcli run` so the agent connects, publishes `online`, and answers ping.
 
-On the device detail page: **Test Connection**.
+On the device detail page: **Test Connection** (ping). For an AWS IoT-style
+subscribe/publish check, open **Fleet → MQTT test**, pick the device, click
+**Listen**, then on the device run:
+
+```bash
+meteorcli mqtt-test
+```
+
+That publishes one JSON message to `devices/{device_id}/events` over TLS. The
+MQTT test page shows the payload under **Messages**. Register/claim must have
+written `~/.config/meteorcli/mqtt.json` first (`meteorcli status` should say
+`MQTT: configured`). `MQTT_PUBLIC_HOST` on the server must be reachable from
+the device (not `localhost` for a Pi on the LAN). `make mqtt-certs` includes
+this machine's LAN IP in the broker certificate; restart EMQX after generating
+certs so it loads the new files.
 
 ## Manual mosquitto checks
 
@@ -72,7 +86,7 @@ A second device username must be **denied** on `devices/OTHER_ID/#`.
 
 ```text
 devices/{device_id}/status              PUBLISH (device, LWT)
-devices/{device_id}/events              PUBLISH (device)
+devices/{device_id}/events              PUBLISH (device and MQTT test console)
 devices/{device_id}/commands            SUBSCRIBE (device) / PUBLISH (platform)
 devices/{device_id}/commands/result     PUBLISH (device)
 ```

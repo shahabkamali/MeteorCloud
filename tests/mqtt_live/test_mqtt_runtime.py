@@ -123,3 +123,27 @@ def test_other_device_cannot_complete_foreign_command(api, live_config):
     finally:
         session_a.close()
         session_b.close()
+
+
+def test_device_events_reach_platform_observer(api, live_config):
+    device = api.register_device("events-pub")
+    topic = f"devices/{device.device_id}/events"
+    observer = _platform_session(live_config)
+    observer.auto_subscribe = [topic]
+    session = _device_session(live_config, device)
+    observer.start()
+    session.start()
+    try:
+        assert observer.wait_connected() is True
+        assert observer.wait_subscribed() is True
+        assert session.wait_connected() is True
+        payload = json.dumps({"source": "meteorcli", "message": "mqtt-test"})
+        assert session.publish(topic, payload) is True
+        found = observer.wait_message(
+            lambda t, body: t == topic and "mqtt-test" in body,
+            timeout=15,
+        )
+        assert found is not None
+    finally:
+        session.close()
+        observer.close()

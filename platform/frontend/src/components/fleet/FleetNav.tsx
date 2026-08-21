@@ -7,6 +7,7 @@ export function FleetNav({ organizationId }: { organizationId: string }) {
     { to: `/organizations/${organizationId}/device-types`, label: "Device types" },
     { to: `/organizations/${organizationId}/device-groups`, label: "Device groups" },
     { to: `/organizations/${organizationId}/devices`, label: "Devices" },
+    { to: `/organizations/${organizationId}/mqtt`, label: "MQTT test" },
     { to: `/organizations/${organizationId}/api-keys`, label: "API keys" },
   ];
 

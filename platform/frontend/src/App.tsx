@@ -12,6 +12,7 @@ import { DeviceGroupsPage } from "@/pages/fleet/DeviceGroupsPage";
 import { DevicesPage } from "@/pages/fleet/DevicesPage";
 import { DeviceTypesPage } from "@/pages/fleet/DeviceTypesPage";
 import { ApiKeysPage } from "@/pages/fleet/ApiKeysPage";
+import { MqttTestPage } from "@/pages/fleet/MqttTestPage";
 import { OrganizationCreatePage } from "@/pages/organizations/OrganizationCreatePage";
 import { OrganizationListPage } from "@/pages/organizations/OrganizationListPage";
 import { OrganizationMembersPage } from "@/pages/organizations/OrganizationMembersPage";
@@ -98,6 +99,14 @@ export function App() {
           element={
             <ProtectedRoute>
               <DeviceGroupsPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="organizations/:organizationId/mqtt"
+          element={
+            <ProtectedRoute>
+              <MqttTestPage />
             </ProtectedRoute>
           }
         />

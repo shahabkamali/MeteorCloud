@@ -7,6 +7,7 @@ RBAC before touching data, guaranteeing tenant isolation.
 
 from __future__ import annotations
 
+import json
 import uuid
 from datetime import UTC, datetime
 from typing import Any
@@ -62,7 +63,7 @@ from app.modules.fleet.tokens import (
     generate_registration_token,
 )
 from app.modules.identity.models import User
-from app.modules.mqtt.schemas import DevicePingResponse
+from app.modules.mqtt.schemas import DevicePingResponse, MqttTestPublishResponse
 from app.modules.mqtt.service import MqttPublisher, MqttService
 from app.modules.organizations.models import OrganizationMembership, OrganizationRole
 from app.modules.organizations.repository import OrganizationRepository
@@ -774,6 +775,45 @@ class FleetService:
             device_id=device_id,
             publisher=publisher,
         )
+
+    def require_mqtt_listener(
+        self,
+        *,
+        actor: User,
+        organization_id: uuid.UUID,
+        device_id: uuid.UUID,
+    ) -> Device:
+        self._require_membership(organization_id, actor.id)
+        return self._require_device(organization_id, device_id)
+
+    def publish_mqtt_test_event(
+        self,
+        *,
+        actor: User,
+        organization_id: uuid.UUID,
+        device_id: uuid.UUID,
+        payload: dict[str, Any] | None,
+        publisher: MqttPublisher,
+    ) -> MqttTestPublishResponse:
+        membership = self._require_membership(organization_id, actor.id)
+        self._require_manage(membership.role)
+        device = self._require_device(organization_id, device_id)
+        cred = self.session.get(DeviceMqttCredential, device.id)
+        if cred is None or cred.revoked_at is not None:
+            raise ConflictError(
+                "mqtt_not_configured",
+                "This device has no active MQTT credential.",
+            )
+        body = payload if payload is not None else {"source": "console", "message": "hello from console"}
+        topic = f"devices/{device.id}/events"
+        try:
+            publisher.publish(topic, json.dumps(body), qos=1, retain=False)
+        except Exception as exc:
+            raise ConflictError(
+                "mqtt_unavailable",
+                "Could not publish to the MQTT broker.",
+            ) from exc
+        return MqttTestPublishResponse(topic=topic, payload=body)
 
     def _require_device(self, organization_id: uuid.UUID, device_id: uuid.UUID) -> Device:
         device = self.devices.get(organization_id=organization_id, device_id=device_id)

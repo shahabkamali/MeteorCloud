@@ -62,3 +62,13 @@ class DeviceCommandResponse(BaseModel):
 class PingCommandPayload(BaseModel):
     command_id: uuid.UUID
     type: Literal["ping"] = "ping"
+
+
+class MqttTestPublishRequest(BaseModel):
+    device_id: uuid.UUID
+    payload: dict[str, Any] | None = None
+
+
+class MqttTestPublishResponse(BaseModel):
+    topic: str
+    payload: dict[str, Any]

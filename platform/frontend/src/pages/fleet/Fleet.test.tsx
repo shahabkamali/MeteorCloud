@@ -113,6 +113,11 @@ beforeEach(() => {
     page: 1,
     page_size: 10,
   });
+  vi.mocked(fleetApi.listenMqttEvents).mockReturnValue(() => {});
+  vi.mocked(fleetApi.publishMqttTest).mockResolvedValue({
+    topic: "devices/device-1/events",
+    payload: { message: "hello from console" },
+  });
 });
 
 describe("Device types", () => {
@@ -504,5 +509,36 @@ describe("API keys", () => {
     });
     expect(await screen.findByText(/awaiting device/i)).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /^approve$/i })).not.toBeInTheDocument();
+  });
+});
+
+describe("MQTT test", () => {
+  it("lists the example topic and shows a received payload", async () => {
+    const user = userEvent.setup();
+    vi.mocked(fleetApi.listDevices).mockResolvedValue({
+      items: [device],
+      total: 1,
+      page: 1,
+      page_size: 100,
+    });
+    vi.mocked(fleetApi.listenMqttEvents).mockImplementation((_token, _org, _deviceId, onEvent) => {
+      onEvent({
+        organization_id: "org-1",
+        device_id: "device-1",
+        topic: "devices/device-1/events",
+        payload: '{"source":"meteorcli","message":"mqtt-test"}',
+        received_at: new Date().toISOString(),
+      });
+      return () => {};
+    });
+
+    renderApp(["/organizations/org-1/mqtt"]);
+    expect(await screen.findByRole("heading", { name: /mqtt test/i })).toBeInTheDocument();
+    expect(await screen.findByText("devices/device-1/events")).toBeInTheDocument();
+    expect(screen.getByText("meteorcli mqtt-test")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /^listen$/i }));
+    expect(await screen.findByText(/"mqtt-test"/)).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /^stop$/i }));
+    expect(screen.getByRole("button", { name: /^listen$/i })).toBeInTheDocument();
   });
 });

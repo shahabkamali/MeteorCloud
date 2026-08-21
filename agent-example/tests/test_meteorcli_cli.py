@@ -539,4 +539,45 @@ def test_help_lists_commands(capsys) -> None:
     assert "config" in help_out
     assert "test" in help_out
     assert "run" in help_out
+    assert "mqtt-test" in help_out
     assert "status" in help_out
+
+
+def test_mqtt_test_requires_mqtt_json(tmp_path, monkeypatch, capsys) -> None:
+    config_dir = tmp_path / "meteorcli"
+    client = FakeClient()
+    monkeypatch.setattr(meteorcli, "EdgeClient", lambda server_url, **_: client)
+    assert meteorcli.main(
+        ["--config-dir", str(config_dir), "register", "--server", "http://localhost:8000", "--token", "reg_abc"]
+    ) == 0
+    capsys.readouterr()
+    code = meteorcli.main(["--config-dir", str(config_dir), "mqtt-test"])
+    assert code == 1
+    assert "MQTT is not configured" in capsys.readouterr().err
+
+
+def test_mqtt_test_publishes_events_topic(tmp_path, monkeypatch, capsys) -> None:
+    from edge_agent.mqtt_config import MqttConfig, write_mqtt_config
+
+    config_dir = tmp_path / "meteorcli"
+    client = FakeClient()
+    monkeypatch.setattr(meteorcli, "EdgeClient", lambda server_url, **_: client)
+    assert meteorcli.main(
+        ["--config-dir", str(config_dir), "register", "--server", "http://localhost:8000", "--token", "reg_abc"]
+    ) == 0
+    write_mqtt_config(
+        config_dir,
+        MqttConfig(host="localhost", port=8883, username="u", password="p", tls=True),
+    )
+    published: list[tuple[str, dict]] = []
+
+    def fake_publish(device_id: str, _config: object, payload: dict, **_: object) -> None:
+        published.append((device_id, payload))
+
+    monkeypatch.setattr("edge_agent.mqtt.publish_test_event", fake_publish)
+    capsys.readouterr()
+    code = meteorcli.main(["--config-dir", str(config_dir), "mqtt-test"])
+    assert code == 0
+    assert published[0][0] == "device-1"
+    assert published[0][1]["message"] == "mqtt-test"
+    assert "devices/device-1/events" in capsys.readouterr().out

@@ -37,10 +37,28 @@ def test_certificate_script_generates_localhost_san(tmp_path: Path) -> None:
     assert stat.S_IMODE((out / "server.crt").stat().st_mode) == 0o644
 
 
+def test_certificate_script_adds_lan_ip_san(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("MQTT_PUBLIC_HOST", "192.168.0.111")
+    out = tmp_path / "certs"
+    subprocess.run(
+        ["bash", str(SCRIPT), str(out)],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    text = subprocess.check_output(
+        ["openssl", "x509", "-in", str(out / "server.crt"), "-noout", "-text"],
+        text=True,
+    )
+    assert "192.168.0.111" in text
+    assert "DNS:localhost" in text
+
+
 def test_broker_tls_config_exists() -> None:
     compose = COMPOSE.read_text(encoding="utf-8")
     conf = EMQX_CONF.read_text(encoding="utf-8")
     assert "8883:8883" in compose
+    assert "MQTT_PUBLIC_HOST: ${MQTT_PUBLIC_HOST:-localhost}" in compose
     assert "1883:1883" not in compose
     assert "listeners.ssl.default" in conf
     assert 'bind = "0.0.0.0:8883"' in conf

@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 from pathlib import Path
+from urllib.parse import urlparse
 
 from edge_agent.credentials import write_secret_file
 
@@ -18,6 +19,22 @@ class MqttConfig:
     tls: bool = True
     ca_cert: str | None = None
     ca_path: str | None = None
+
+
+_LOOPBACK_HOSTS = {"localhost", "127.0.0.1", "::1", "[::1]"}
+
+
+def resolve_mqtt_broker_host(stored_host: str, server_url: str | None = None) -> str:
+    """If mqtt.json points at loopback, use the HTTP API host instead (LAN devices)."""
+    host = (stored_host or "").strip() or "localhost"
+    if host.lower() not in _LOOPBACK_HOSTS:
+        return host
+    if not server_url:
+        return host
+    api_host = urlparse(server_url).hostname
+    if not api_host or api_host.lower() in _LOOPBACK_HOSTS:
+        return host
+    return api_host
 
 
 def mqtt_paths(config_dir: Path) -> tuple[Path, Path]:

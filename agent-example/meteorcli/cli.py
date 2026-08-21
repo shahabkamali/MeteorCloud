@@ -8,6 +8,7 @@ Subcommands
   request-token  Ask the API for a device token; wait briefly for admin approval.
   claim          Collect the device token after a later approval.
   run        Send periodic heartbeats.
+  mqtt-test  Publish one TLS MQTT test message to devices/{id}/events.
   status     Show persisted (non-secret) configuration.
 
 Secrets are never printed by any command except when the user explicitly
@@ -575,7 +576,9 @@ def _cmd_run(args: argparse.Namespace) -> int:
         try:
             mqtt_config = read_mqtt_config(paths.config_path.parent)
             if mqtt_config is not None and config.device_id:
-                mqtt_session = DeviceMqttSession(config.device_id, mqtt_config)
+                mqtt_session = DeviceMqttSession(
+                    config.device_id, mqtt_config, server_url=config.server_url
+                )
                 mqtt_session.start()
         except Exception:
             logger.exception("MQTT failed to start; continuing with heartbeats")
@@ -623,6 +626,43 @@ def _cmd_status(args: argparse.Namespace) -> int:
     return 0 if config and config.device_id else 1
 
 
+def _cmd_mqtt_test(args: argparse.Namespace) -> int:
+    paths = _paths_from_args(args)
+    loaded = _load_or_fail(paths)
+    if loaded is None:
+        return 1
+    config, _device_token = loaded
+    from datetime import UTC, datetime
+
+    from edge_agent.mqtt import events_topic, publish_test_event
+    from edge_agent.mqtt_config import read_mqtt_config
+
+    mqtt_config = read_mqtt_config(paths.config_path.parent)
+    if mqtt_config is None or not config.device_id:
+        print(
+            "error: MQTT is not configured. Re-register or claim this device "
+            "so mqtt.json is written next to the HTTP credential.",
+            file=sys.stderr,
+        )
+        return 1
+    payload = {
+        "source": "meteorcli",
+        "message": "mqtt-test",
+        "sent_at": datetime.now(UTC).isoformat(),
+    }
+    topic = events_topic(config.device_id)
+    try:
+        publish_test_event(
+            config.device_id, mqtt_config, payload, server_url=config.server_url
+        )
+    except Exception as error:
+        logger.exception("MQTT test publish failed")
+        print(f"error: MQTT test failed: {error}", file=sys.stderr)
+        return 1
+    print(f"Published MQTT test message to {topic}")
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog=PROG,
@@ -636,6 +676,7 @@ def build_parser() -> argparse.ArgumentParser:
             f"  {PROG} claim\n"
             f"  {PROG} register --token reg_XXXX\n"
             f"  {PROG} run\n"
+            f"  {PROG} mqtt-test\n"
             f"  {PROG} status\n"
             "\n"
             "Environment variables:\n"
@@ -833,6 +874,16 @@ def build_parser() -> argparse.ArgumentParser:
         help="Override the heartbeat interval.",
     )
     run_parser.set_defaults(func=_cmd_run)
+
+    mqtt_test_parser = subparsers.add_parser(
+        "mqtt-test",
+        help="Publish one MQTT test message over TLS.",
+        description=(
+            "Publish a JSON payload to devices/{device_id}/events using mqtt.json. "
+            "Does not start the heartbeat loop."
+        ),
+    )
+    mqtt_test_parser.set_defaults(func=_cmd_mqtt_test)
 
     status_parser = subparsers.add_parser(
         "status",

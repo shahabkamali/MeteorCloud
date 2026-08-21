@@ -6,8 +6,14 @@ import json
 import os
 import stat
 
-from edge_agent.mqtt import handle_command, next_backoff, tls_insecure_enabled
-from edge_agent.mqtt_config import MqttConfig, mqtt_from_api_payload, read_mqtt_config, write_mqtt_config
+from edge_agent.mqtt import handle_command, next_backoff, tls_insecure_enabled, verify_broker_tls
+from edge_agent.mqtt_config import (
+    MqttConfig,
+    mqtt_from_api_payload,
+    read_mqtt_config,
+    resolve_mqtt_broker_host,
+    write_mqtt_config,
+)
 from edge_agent.registration import register
 from tests.conftest import FakeClient
 
@@ -29,6 +35,22 @@ def test_reconnect_backoff() -> None:
     assert next_backoff(1) == 2
     assert next_backoff(16) == 30
     assert next_backoff(30) == 30
+
+
+def test_resolve_mqtt_broker_host_uses_api_host_when_loopback() -> None:
+    assert resolve_mqtt_broker_host("localhost", "http://192.168.0.111:8000") == "192.168.0.111"
+    assert resolve_mqtt_broker_host("127.0.0.1", "http://192.168.0.111:8000") == "192.168.0.111"
+    assert resolve_mqtt_broker_host("mqtt.example.com", "http://192.168.0.111:8000") == "mqtt.example.com"
+    assert resolve_mqtt_broker_host("localhost", "http://127.0.0.1:8000") == "localhost"
+
+
+def test_verify_broker_tls_reports_unreachable() -> None:
+    try:
+        verify_broker_tls("127.0.0.1", 1, None, insecure=True, timeout=0.2)
+    except RuntimeError as exc:
+        assert "not reachable" in str(exc)
+        return
+    raise AssertionError("expected unreachable broker")
 
 
 def test_insecure_tls_disabled_by_default(monkeypatch) -> None:

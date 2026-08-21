@@ -8,8 +8,9 @@ Subcommands
   request-token  Ask the API for a device token; wait briefly for admin approval.
   claim          Collect the device token after a later approval.
   run        Send periodic heartbeats.
-  mqtt-test  Publish one TLS MQTT test message to devices/{id}/events.
-  status     Show persisted (non-secret) configuration.
+  mqtt-test    Publish one TLS MQTT test message to devices/{id}/events.
+  mqtt-listen  Print commands the platform sends to this device.
+  status       Show persisted (non-secret) configuration.
 
 Secrets are never printed by any command except when the user explicitly
 passes them on the command line.
@@ -626,15 +627,7 @@ def _cmd_status(args: argparse.Namespace) -> int:
     return 0 if config and config.device_id else 1
 
 
-def _cmd_mqtt_test(args: argparse.Namespace) -> int:
-    paths = _paths_from_args(args)
-    loaded = _load_or_fail(paths)
-    if loaded is None:
-        return 1
-    config, _device_token = loaded
-    from datetime import UTC, datetime
-
-    from edge_agent.mqtt import events_topic, publish_test_event
+def _mqtt_config_or_fail(paths, config):
     from edge_agent.mqtt_config import read_mqtt_config
 
     mqtt_config = read_mqtt_config(paths.config_path.parent)
@@ -644,6 +637,22 @@ def _cmd_mqtt_test(args: argparse.Namespace) -> int:
             "so mqtt.json is written next to the HTTP credential.",
             file=sys.stderr,
         )
+        return None
+    return mqtt_config
+
+
+def _cmd_mqtt_test(args: argparse.Namespace) -> int:
+    paths = _paths_from_args(args)
+    loaded = _load_or_fail(paths)
+    if loaded is None:
+        return 1
+    config, _device_token = loaded
+    from datetime import UTC, datetime
+
+    from edge_agent.mqtt import events_topic, publish_test_event
+
+    mqtt_config = _mqtt_config_or_fail(paths, config)
+    if mqtt_config is None:
         return 1
     payload = {
         "source": "meteorcli",
@@ -663,6 +672,41 @@ def _cmd_mqtt_test(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_mqtt_listen(args: argparse.Namespace) -> int:
+    paths = _paths_from_args(args)
+    loaded = _load_or_fail(paths)
+    if loaded is None:
+        return 1
+    config, _device_token = loaded
+    from edge_agent.mqtt import commands_topic, listen_commands
+
+    mqtt_config = _mqtt_config_or_fail(paths, config)
+    if mqtt_config is None:
+        return 1
+    topic = commands_topic(config.device_id)
+    print(f"Listening on {topic} (Ctrl+C to stop)", flush=True)
+
+    def _print_message(message_topic: str, payload: str) -> None:
+        print(f"{message_topic} {payload}", flush=True)
+
+    try:
+        listen_commands(
+            config.device_id,
+            mqtt_config,
+            server_url=config.server_url,
+            timeout=args.timeout,
+            on_message=_print_message,
+        )
+    except KeyboardInterrupt:
+        print("Stopped listening", file=sys.stderr)
+        return 0
+    except Exception as error:
+        logger.exception("MQTT listen failed")
+        print(f"error: MQTT listen failed: {error}", file=sys.stderr)
+        return 1
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog=PROG,
@@ -677,6 +721,7 @@ def build_parser() -> argparse.ArgumentParser:
             f"  {PROG} register --token reg_XXXX\n"
             f"  {PROG} run\n"
             f"  {PROG} mqtt-test\n"
+            f"  {PROG} mqtt-listen\n"
             f"  {PROG} status\n"
             "\n"
             "Environment variables:\n"
@@ -884,6 +929,25 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     mqtt_test_parser.set_defaults(func=_cmd_mqtt_test)
+
+    mqtt_listen_parser = subparsers.add_parser(
+        "mqtt-listen",
+        help="Print MQTT commands sent to this device.",
+        description=(
+            "Subscribe to devices/{device_id}/commands over TLS and print payloads. "
+            "This is the only topic the device credential may subscribe to. "
+            "Does not answer ping or start heartbeats. Uses a unique MQTT client id "
+            "so meteorcli run stays connected."
+        ),
+    )
+    mqtt_listen_parser.add_argument(
+        "--timeout",
+        type=float,
+        default=None,
+        metavar="SECONDS",
+        help="Stop after this many seconds (default: until Ctrl+C).",
+    )
+    mqtt_listen_parser.set_defaults(func=_cmd_mqtt_listen)
 
     status_parser = subparsers.add_parser(
         "status",

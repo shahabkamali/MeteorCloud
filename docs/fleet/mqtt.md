@@ -59,6 +59,18 @@ the device (not `localhost` for a Pi on the LAN). `make mqtt-certs` includes
 this machine's LAN IP in the broker certificate; restart EMQX after generating
 certs so it loads the new files.
 
+To print **commands the platform sends to the device** (ping, and later command
+types), run on the device:
+
+```bash
+meteorcli mqtt-listen
+```
+
+That subscribes only to `devices/{device_id}/commands` — the only topic the
+device credential is allowed to subscribe to. It does not show `mqtt-test`
+events (those are visible on the Fleet MQTT test page). It uses a separate
+MQTT client id, so `meteorcli run` can stay connected.
+
 ## Manual mosquitto checks
 
 Subscribe (as the device):

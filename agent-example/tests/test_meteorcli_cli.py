@@ -540,6 +540,7 @@ def test_help_lists_commands(capsys) -> None:
     assert "test" in help_out
     assert "run" in help_out
     assert "mqtt-test" in help_out
+    assert "mqtt-listen" in help_out
     assert "status" in help_out
 
 
@@ -581,3 +582,47 @@ def test_mqtt_test_publishes_events_topic(tmp_path, monkeypatch, capsys) -> None
     assert published[0][0] == "device-1"
     assert published[0][1]["message"] == "mqtt-test"
     assert "devices/device-1/events" in capsys.readouterr().out
+
+
+def test_mqtt_listen_requires_mqtt_json(tmp_path, monkeypatch, capsys) -> None:
+    config_dir = tmp_path / "meteorcli"
+    client = FakeClient()
+    monkeypatch.setattr(meteorcli, "EdgeClient", lambda server_url, **_: client)
+    assert meteorcli.main(
+        ["--config-dir", str(config_dir), "register", "--server", "http://localhost:8000", "--token", "reg_abc"]
+    ) == 0
+    capsys.readouterr()
+    code = meteorcli.main(["--config-dir", str(config_dir), "mqtt-listen", "--timeout", "0"])
+    assert code == 1
+    assert "MQTT is not configured" in capsys.readouterr().err
+
+
+def test_mqtt_listen_subscribes_to_commands_topic(tmp_path, monkeypatch, capsys) -> None:
+    from edge_agent.mqtt_config import MqttConfig, write_mqtt_config
+
+    config_dir = tmp_path / "meteorcli"
+    client = FakeClient()
+    monkeypatch.setattr(meteorcli, "EdgeClient", lambda server_url, **_: client)
+    assert meteorcli.main(
+        ["--config-dir", str(config_dir), "register", "--server", "http://localhost:8000", "--token", "reg_abc"]
+    ) == 0
+    write_mqtt_config(
+        config_dir,
+        MqttConfig(host="localhost", port=8883, username="u", password="p", tls=True),
+    )
+    listened: list[tuple[str, object, float | None]] = []
+
+    def fake_listen(device_id: str, config: object, **kwargs: object) -> str:
+        listened.append((device_id, config, kwargs.get("timeout")))  # type: ignore[arg-type]
+        kwargs["on_message"]("devices/device-1/commands", '{"type":"ping"}')  # type: ignore[operator]
+        return "devices/device-1/commands"
+
+    monkeypatch.setattr("edge_agent.mqtt.listen_commands", fake_listen)
+    capsys.readouterr()
+    code = meteorcli.main(["--config-dir", str(config_dir), "mqtt-listen", "--timeout", "0"])
+    assert code == 0
+    assert listened[0][0] == "device-1"
+    assert listened[0][2] == 0.0
+    out = capsys.readouterr().out
+    assert "devices/device-1/commands" in out
+    assert '{"type":"ping"}' in out

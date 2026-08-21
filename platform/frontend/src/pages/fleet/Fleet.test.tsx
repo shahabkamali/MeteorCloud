@@ -535,7 +535,8 @@ describe("MQTT test", () => {
     renderApp(["/organizations/org-1/mqtt"]);
     expect(await screen.findByRole("heading", { name: /mqtt test/i })).toBeInTheDocument();
     expect(await screen.findByText("devices/device-1/events")).toBeInTheDocument();
-    expect(screen.getByText("meteorcli mqtt-test")).toBeInTheDocument();
+    expect(screen.getByText(/meteorcli mqtt-test/)).toBeInTheDocument();
+    expect(screen.getByText(/meteorcli mqtt-listen/)).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: /^listen$/i }));
     expect(await screen.findByText(/"mqtt-test"/)).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: /^stop$/i }));

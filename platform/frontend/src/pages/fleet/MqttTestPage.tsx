@@ -22,7 +22,7 @@ function eventsTopic(deviceId: string): string {
 }
 
 function meteorcliCommand(): string {
-  return "meteorcli mqtt-test";
+  return "meteorcli mqtt-test\nmeteorcli mqtt-listen";
 }
 
 export function MqttTestPage() {
@@ -138,6 +138,9 @@ export function MqttTestPage() {
         <div>
           <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">On the device</p>
           <pre className="mt-2 overflow-x-auto rounded-md bg-secondary p-3 text-sm">{command}</pre>
+          <p className="mt-2 text-xs text-muted-foreground">
+            mqtt-test publishes an event to this page. mqtt-listen prints commands the platform sends to the device.
+          </p>
           <Button type="button" variant="outline" className="mt-2" onClick={() => void copyCommand()} disabled={!selectedId}>
             Copy command
           </Button>

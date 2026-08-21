@@ -44,6 +44,59 @@ def test_resolve_mqtt_broker_host_uses_api_host_when_loopback() -> None:
     assert resolve_mqtt_broker_host("localhost", "http://127.0.0.1:8000") == "localhost"
 
 
+def test_listen_commands_subscribes_only_to_commands(monkeypatch) -> None:
+    from edge_agent.mqtt import listen_commands
+
+    subscribed: list[str] = []
+
+    class ReasonCode:
+        is_failure = False
+
+    class FakeMqttClient:
+        def __init__(self, *args, **kwargs) -> None:
+            self.on_connect = None
+            self.on_message = None
+
+        def username_pw_set(self, *args, **kwargs) -> None:
+            return None
+
+        def tls_set(self, **kwargs) -> None:
+            return None
+
+        def tls_insecure_set(self, _value: bool) -> None:
+            return None
+
+        def connect_async(self, _host: str, _port: int, _keepalive: int) -> None:
+            assert self.on_connect is not None
+            self.on_connect(self, None, None, ReasonCode())
+
+        def loop_start(self) -> None:
+            return None
+
+        def loop_stop(self) -> None:
+            return None
+
+        def disconnect(self) -> None:
+            return None
+
+        def subscribe(self, topic: str, qos: int = 0):
+            subscribed.append(topic)
+            assert qos == 1
+            return (0, 1)
+
+    monkeypatch.setattr("edge_agent.mqtt.verify_broker_tls", lambda *args, **kwargs: None)
+    monkeypatch.setattr("edge_agent.mqtt.mqtt.Client", FakeMqttClient)
+    topic = listen_commands(
+        "device-1",
+        MqttConfig(host="localhost", port=8883, username="u", password="p"),
+        tls_insecure=True,
+        timeout=0,
+        sleep=lambda _seconds: None,
+    )
+    assert topic == "devices/device-1/commands"
+    assert subscribed == ["devices/device-1/commands"]
+
+
 def test_verify_broker_tls_reports_unreachable() -> None:
     try:
         verify_broker_tls("127.0.0.1", 1, None, insecure=True, timeout=0.2)

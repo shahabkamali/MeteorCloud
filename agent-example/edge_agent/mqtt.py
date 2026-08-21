@@ -229,24 +229,20 @@ def events_topic(device_id: str) -> str:
     return f"devices/{device_id}/events"
 
 
-def publish_test_event(
+def commands_topic(device_id: str) -> str:
+    return f"devices/{device_id}/commands"
+
+
+def _device_mqtt_client(
     device_id: str,
     config: MqttConfig,
-    payload: dict,
     *,
-    tls_insecure: bool | None = None,
-    server_url: str | None = None,
-    timeout: float = 12,
-) -> None:
-    """Connect over TLS, publish one events message, then disconnect."""
-    connected = Event()
-    connect_result: dict[str, object] = {}
-    insecure = tls_insecure_enabled() if tls_insecure is None else tls_insecure
-    host = resolve_mqtt_broker_host(config.host, server_url)
-    verify_broker_tls(host, config.port, config.ca_path, insecure=insecure)
+    suffix: str,
+    insecure: bool,
+) -> mqtt.Client:
     client = mqtt.Client(
         mqtt.CallbackAPIVersion.VERSION2,
-        client_id=f"device-{device_id}-mqtt-test-{uuid.uuid4().hex[:8]}",
+        client_id=f"device-{device_id}-{suffix}-{uuid.uuid4().hex[:8]}",
         protocol=mqtt.MQTTv311,
     )
     client.username_pw_set(config.username, config.password)
@@ -257,6 +253,17 @@ def publish_test_event(
         else:
             client.tls_set(ca_certs=config.ca_path, cert_reqs=ssl.CERT_REQUIRED)
             client.tls_insecure_set(False)
+    return client
+
+
+def _wait_for_connect(
+    client: mqtt.Client,
+    host: str,
+    port: int,
+    timeout: float,
+) -> None:
+    connected = Event()
+    connect_result: dict[str, object] = {}
 
     def _on_connect(
         _client: mqtt.Client,
@@ -269,15 +276,32 @@ def publish_test_event(
         connected.set()
 
     client.on_connect = _on_connect
-    logger.info("Connecting to MQTT %s:%s with TLS", host, config.port)
-    client.connect_async(host, config.port, 30)
+    logger.info("Connecting to MQTT %s:%s with TLS", host, port)
+    client.connect_async(host, port, 30)
     client.loop_start()
+    if not connected.wait(timeout):
+        raise RuntimeError(f"MQTT connect timed out ({host}:{port})")
+    reason_code = connect_result.get("reason_code")
+    if getattr(reason_code, "is_failure", False):
+        raise RuntimeError(f"MQTT connect refused: {reason_code}")
+
+
+def publish_test_event(
+    device_id: str,
+    config: MqttConfig,
+    payload: dict,
+    *,
+    tls_insecure: bool | None = None,
+    server_url: str | None = None,
+    timeout: float = 12,
+) -> None:
+    """Connect over TLS, publish one events message, then disconnect."""
+    insecure = tls_insecure_enabled() if tls_insecure is None else tls_insecure
+    host = resolve_mqtt_broker_host(config.host, server_url)
+    verify_broker_tls(host, config.port, config.ca_path, insecure=insecure)
+    client = _device_mqtt_client(device_id, config, suffix="mqtt-test", insecure=insecure)
     try:
-        if not connected.wait(timeout):
-            raise RuntimeError(f"MQTT connect timed out ({host}:{config.port})")
-        reason_code = connect_result.get("reason_code")
-        if getattr(reason_code, "is_failure", False):
-            raise RuntimeError(f"MQTT connect refused: {reason_code}")
+        _wait_for_connect(client, host, config.port, timeout)
         info = client.publish(events_topic(device_id), json.dumps(payload), qos=COMMANDS_QOS, retain=False)
         info.wait_for_publish(timeout=8)
         if not info.is_published():
@@ -285,3 +309,51 @@ def publish_test_event(
     finally:
         client.disconnect()
         client.loop_stop()
+
+
+def listen_commands(
+    device_id: str,
+    config: MqttConfig,
+    *,
+    tls_insecure: bool | None = None,
+    server_url: str | None = None,
+    timeout: float | None = None,
+    connect_timeout: float = 12,
+    on_message: Callable[[str, str], None] | None = None,
+    sleep: Callable[[float], None] = time.sleep,
+) -> str:
+    """Subscribe to this device's commands topic and print payloads until timeout.
+
+    Does not handle commands (no ping/pong). Uses a unique client id so
+    ``meteorcli run`` stays connected.
+    """
+    insecure = tls_insecure_enabled() if tls_insecure is None else tls_insecure
+    host = resolve_mqtt_broker_host(config.host, server_url)
+    topic = commands_topic(device_id)
+    emit = on_message or (lambda _topic, _payload: None)
+    verify_broker_tls(host, config.port, config.ca_path, insecure=insecure)
+    client = _device_mqtt_client(device_id, config, suffix="mqtt-listen", insecure=insecure)
+
+    def _on_message(
+        _client: mqtt.Client,
+        _userdata: object,
+        message: mqtt.MQTTMessage,
+    ) -> None:
+        payload = message.payload.decode("utf-8", errors="replace")
+        emit(message.topic, payload)
+
+    client.on_message = _on_message
+    try:
+        _wait_for_connect(client, host, config.port, connect_timeout)
+        result, _mid = client.subscribe(topic, qos=COMMANDS_QOS)
+        if result != mqtt.MQTT_ERR_SUCCESS:
+            raise RuntimeError(f"MQTT subscribe failed for {topic}")
+        deadline = None if timeout is None else time.monotonic() + timeout
+        while True:
+            if timeout is not None and (timeout <= 0 or time.monotonic() >= deadline):
+                break
+            sleep(0.1)
+    finally:
+        client.disconnect()
+        client.loop_stop()
+    return topic
